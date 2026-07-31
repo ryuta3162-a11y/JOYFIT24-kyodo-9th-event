@@ -7,7 +7,7 @@ const LEGACY_RECORDS_SHEET = 'records';
 const TEST_WEEK_OVERRIDE = null;
 
 const EVENT_WEEKS = [
-  { week: 1, event: '握力測定', sheet: '握力測定', unit: 'kg', start: '2026-07-20', end: '2026-08-09', higherIsBetter: true },
+  { week: 1, event: '握力測定', sheet: '握力測定', unit: 'kg', start: '2026-08-03', end: '2026-08-09', higherIsBetter: true },
   { week: 2, event: '前屈', sheet: '前屈', unit: 'cm', start: '2026-08-10', end: '2026-08-16', higherIsBetter: true },
   { week: 3, event: 'プランク', sheet: 'プランク', unit: '秒', start: '2026-08-17', end: '2026-08-23', higherIsBetter: true },
   { week: 4, event: '腕立て伏せ', sheet: '腕立て伏せ', unit: '回', start: '2026-08-24', end: '2026-08-30', higherIsBetter: true },

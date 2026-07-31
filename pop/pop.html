@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>JOYFIT24 経堂 9周年イベント POP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #444; }
+  .poster {
+    position: relative;
+    width: 1240px;
+    height: 1754px;
+    margin: 0 auto;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(255, 255, 255, .14), transparent 42%),
+      radial-gradient(circle at 88% 88%, rgba(0, 0, 0, .30), transparent 55%),
+      linear-gradient(160deg, #e6173a 0%, #c00e2b 45%, #8e0a1c 100%);
+    font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    overflow: hidden;
+  }
+  /* 斜めストライプ */
+  .stripes {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      -35deg,
+      rgba(255, 255, 255, .05) 0 26px,
+      transparent 26px 92px
+    );
+  }
+  /* きらめき */
+  .spark {
+    position: absolute;
+    color: rgba(255, 215, 110, .9);
+    font-weight: 900;
+    text-shadow: 0 0 24px rgba(255, 200, 80, .8);
+  }
+  .headline {
+    position: relative;
+    margin-top: 120px;
+  }
+  .headline .store {
+    font-size: 92px;
+    font-weight: 900;
+    letter-spacing: .05em;
+    color: #fff;
+    text-shadow: 0 6px 22px rgba(0, 0, 0, .35);
+  }
+  .headline .event {
+    margin-top: 26px;
+    display: inline-block;
+    padding: 18px 64px;
+    background: linear-gradient(180deg, #ffd76e, #f2b638);
+    color: #7a1020;
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    border-radius: 999px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 255, 255, .65);
+  }
+  .qrCard {
+    position: relative;
+    margin-top: 96px;
+    padding: 56px;
+    background: #fff;
+    border-radius: 44px;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, .45), 0 0 0 14px rgba(255, 215, 110, .95), 0 0 0 26px rgba(255, 255, 255, .25);
+  }
+  .qrCard img {
+    display: block;
+    width: 780px;
+    height: 780px;
+  }
+</style>
+</head>
+<body>
+  <div class="poster">
+    <div class="stripes"></div>
+
+    <span class="spark" style="top: 320px; left: 90px; font-size: 90px; transform: rotate(-12deg);">✦</span>
+    <span class="spark" style="top: 210px; right: 110px; font-size: 64px; transform: rotate(18deg);">✦</span>
+    <span class="spark" style="top: 640px; left: 60px; font-size: 52px; transform: rotate(8deg); opacity: .75;">✦</span>
+    <span class="spark" style="top: 700px; right: 70px; font-size: 96px; transform: rotate(-15deg);">✦</span>
+    <span class="spark" style="bottom: 300px; left: 110px; font-size: 78px; transform: rotate(14deg);">✦</span>
+    <span class="spark" style="bottom: 180px; right: 130px; font-size: 60px; transform: rotate(-10deg); opacity: .8;">✦</span>
+
+    <div class="headline">
+      <div class="store">JOYFIT24 経堂</div>
+      <div class="event">9周年イベント</div>
+    </div>
+
+    <div class="qrCard">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=800x800&margin=0&data=https%3A%2F%2Fjoyfit24-kyodo-9th-event.vercel.app%2F" alt="参加ページQRコード">
+    </div>
+  </div>
+</body>
+</html>
