@@ -1037,6 +1037,14 @@
 
         <div class="rankBoard">
           <div class="sectionHead">
+            <h2>スタッフランキング</h2>
+            <span id="staffUnitLabel">握力測定 kg</span>
+          </div>
+          <ol class="ranking" id="staffRankingList"></ol>
+        </div>
+
+        <div class="rankBoard">
+          <div class="sectionHead">
             <h2>他の週のランキング</h2>
             <span>種目別</span>
           </div>
@@ -1241,6 +1249,7 @@
       updateEntryAvailability();
       renderMyAndTopRecords(current.week);
       renderRanking("rankingList", current.week);
+      renderStaffRanking(current.week);
       renderWeekChips();
       renderRanking("historyList", state.selectedWeek);
     }
@@ -1316,6 +1325,43 @@
           <div class="place ${medal}">${row.rank}</div>
           <div class="name">${escapeHtml(row.displayName)}${row.division === "staff" ? " スタッフ" : ""}${mine ? "（あなた）" : ""}<span class="sub">${row.attempts}回記録</span></div>
           <div class="score">${formatScore(row.total)} ${w.unit}</div>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    const staffRankings = {
+      1: [
+        { name: "日下", score: 56 },
+        { name: "澤野", score: 45 },
+        { name: "石田", score: 38 },
+        { name: "齋木", score: 37 },
+        { name: "佐藤", score: 34 },
+        { name: "行徳", score: 29 },
+        { name: "蜂谷", score: 7 }
+      ]
+    };
+
+    function renderStaffRanking(weekNo) {
+      const list = document.getElementById("staffRankingList");
+      const label = document.getElementById("staffUnitLabel");
+      const w = weeks.find(item => item.week === weekNo) || weeks[0];
+      if (label) label.textContent = `${w.event} ${w.unit}`;
+      const rows = (staffRankings[weekNo] || []).slice().sort((a, b) => b.score - a.score);
+      list.innerHTML = "";
+      if (!rows.length) {
+        list.innerHTML = `<li class="rankItem"><div class="place">-</div><div class="name">まだ記録がありません<span class="sub">スタッフの記録をお待ちしています</span></div><div class="score">—</div></li>`;
+        return;
+      }
+      rows.forEach((row, index) => {
+        const rank = index + 1;
+        const medal = medalClass(rank);
+        const li = document.createElement("li");
+        li.className = `rankItem${medal ? ` medal-${rank}` : ""}`;
+        li.innerHTML = `
+          <div class="place ${medal}">${rank}</div>
+          <div class="name">${escapeHtml(row.name)}<span class="sub">スタッフ</span></div>
+          <div class="score">${formatScore(row.score)} ${w.unit}</div>
         `;
         list.appendChild(li);
       });
