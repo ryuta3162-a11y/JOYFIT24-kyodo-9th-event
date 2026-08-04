@@ -542,6 +542,7 @@ function buildAllRankings() {
 function buildRanking(rows, week) {
   const ranked = rows.map(row => {
     const scores = [row.score1, row.score2, row.score3].filter(value => Number.isFinite(value));
+    const best = scores.length ? Math.max.apply(null, scores) : 0;
     return {
       displayName: row.displayName,
       week: week.week,
@@ -549,14 +550,16 @@ function buildRanking(rows, week) {
       unit: week.unit,
       division: row.division,
       attempts: scores.length,
-      total: scores.reduce((sum, value) => sum + value, 0),
+      best,
+      // 互換のため total にも最高記録を入れる（合計ではない）
+      total: best,
       score1: row.score1,
       score2: row.score2,
       score3: row.score3,
     };
   }).filter(row => row.attempts > 0);
 
-  ranked.sort((a, b) => week.higherIsBetter ? b.total - a.total : a.total - b.total);
+  ranked.sort((a, b) => week.higherIsBetter ? b.best - a.best : a.best - b.best);
   return ranked.slice(0, 10).map((row, index) => ({ ...row, rank: index + 1 }));
 }
 

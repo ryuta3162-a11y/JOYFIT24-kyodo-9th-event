@@ -1014,7 +1014,7 @@
         <div class="rankBoard">
           <div class="sectionHead">
             <h2>今週のランキング</h2>
-            <span id="unitLabel">合計 kg</span>
+            <span id="unitLabel">最高記録 kg</span>
           </div>
           <div class="myRecordCard" id="myRecordCard">
             <div class="label">あなたの記録</div>
@@ -1271,7 +1271,7 @@
       document.getElementById("currentPeriod").textContent = formatPeriod(current);
       document.getElementById("guideEvent").textContent = current.event;
       document.getElementById("unitBadge").textContent = current.unit;
-      document.getElementById("unitLabel").textContent = `合計（${current.unit}）`;
+      document.getElementById("unitLabel").textContent = `最高記録（${current.unit}）`;
       applyScoreInputRules();
       updateEntryAvailability();
       renderMyAndTopRecords(current.week);
@@ -1319,15 +1319,15 @@
       const my = getMyWeekStats(weekNo);
 
       document.getElementById("topRecordName").textContent = top ? top.displayName : "—";
-      document.getElementById("topRecordValue").textContent = top ? `${formatScore(top.total)} ${w.unit}` : "—";
+      document.getElementById("topRecordValue").textContent = top ? `${formatScore(top.best != null ? top.best : top.total)} ${w.unit}` : "—";
       document.getElementById("topRecordHint").textContent = top
         ? `1位・${top.attempts}回記録`
         : "まだ記録がありません";
 
       document.getElementById("myRecordName").textContent = state.session ? (state.session.nickname || "あなた") : "あなた";
       if (my) {
-        document.getElementById("myRecordValue").textContent = `${formatScore(my.total)} ${w.unit}`;
-        document.getElementById("myRecordHint").textContent = `合計 ${formatScore(my.total)} ${w.unit} ／ ベスト ${formatScore(my.best)} ${w.unit}（${my.attempts}回）`;
+        document.getElementById("myRecordValue").textContent = `${formatScore(my.best)} ${w.unit}`;
+        document.getElementById("myRecordHint").textContent = `最高記録 ${formatScore(my.best)} ${w.unit}（${my.attempts}回中）`;
       } else {
         document.getElementById("myRecordValue").textContent = "—";
         document.getElementById("myRecordHint").textContent = "まだ記録がありません";
@@ -1347,11 +1347,12 @@
         const li = document.createElement("li");
         const medal = medalClass(row.rank);
         const mine = isMyRow(row);
+        const value = row.best != null ? row.best : row.total;
         li.className = `rankItem${medal ? ` medal-${row.rank}` : ""}${mine ? " mine" : ""}`;
         li.innerHTML = `
           <div class="place ${medal}">${row.rank}</div>
           <div class="name">${escapeHtml(row.displayName)}${row.division === "staff" ? " スタッフ" : ""}${mine ? "（あなた）" : ""}<span class="sub">${row.attempts}回記録</span></div>
-          <div class="score">${formatScore(row.total)} ${w.unit}</div>
+          <div class="score">${formatScore(value)} ${w.unit}</div>
         `;
         list.appendChild(li);
       });
