@@ -379,13 +379,32 @@
 
     .eventMeta {
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 8px;
       color: var(--mute);
       font-size: 12px;
       font-weight: 700;
       letter-spacing: .06em;
+    }
+
+    .attemptBadge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: rgba(208, 18, 45, .1);
+      color: var(--red-deep);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .04em;
+    }
+
+    .attemptBadge.is-done {
+      background: rgba(18, 18, 18, .08);
+      color: var(--mute);
     }
 
     .eventBoard strong {
@@ -978,7 +997,8 @@
 
         <div class="eventBoard">
           <div class="eventMeta">
-            <span id="weekNo">Week 1</span>
+            <span id="weekNo">第1週</span>
+            <span class="attemptBadge" id="attemptStatus">1回目</span>
           </div>
           <strong id="currentEvent">握力測定</strong>
           <div class="period" id="currentPeriod">8/3(月) - 8/9(日)</div>
@@ -1230,6 +1250,26 @@
       showMessage("authMessage", "", true);
     }
 
+    function getAttemptStatus() {
+      const my = getMyWeekStats(getCurrentWeek().week);
+      const attempts = my ? my.attempts : 0;
+      if (attempts >= 3) {
+        return { text: "終了", done: true };
+      }
+      if (hasMeasuredToday()) {
+        return { text: "本日終了", done: true };
+      }
+      return { text: `${attempts + 1}回目`, done: false };
+    }
+
+    function updateAttemptStatus() {
+      const el = document.getElementById("attemptStatus");
+      if (!el) return;
+      const status = getAttemptStatus();
+      el.textContent = status.text;
+      el.classList.toggle("is-done", status.done);
+    }
+
     function updateEntryAvailability() {
       const done = hasMeasuredToday();
       const board = document.getElementById("entryBoard");
@@ -1237,6 +1277,7 @@
       if (!board || !doneBox) return;
       board.classList.toggle("is-done", done);
       doneBox.classList.toggle("show", done);
+      updateAttemptStatus();
     }
 
     function showDoneOverlay(show) {
@@ -1267,6 +1308,7 @@
       document.getElementById("accountName").textContent = state.session.nickname || "ゲスト";
       document.getElementById("accountMeta").textContent = state.session.division === "staff" ? "スタッフ" : "会員";
       document.getElementById("weekNo").textContent = `第${current.week}週`;
+      updateAttemptStatus();
       document.getElementById("currentEvent").textContent = current.event;
       document.getElementById("currentPeriod").textContent = formatPeriod(current);
       document.getElementById("guideEvent").textContent = current.event;
