@@ -1066,6 +1066,7 @@
       <div class="loadingPanel">
         <div class="loaderRing" aria-hidden="true"></div>
         <strong id="loadingTitle">読み込み中です</strong>
+        <button class="authSwitch" type="button" id="loadingCancel" style="margin-top:18px;">閉じる</button>
       </div>
     </div>
   </main>
@@ -1074,7 +1075,7 @@
     const CONFIG = {
       gasEndpoint: "https://script.google.com/macros/s/AKfycbwHCmikLDfBN25bLcEkaLP6RlGyuf7Z6B64hGB0BJGcLQjxwiysATZ6qSdAZNl5h0m1RQ/exec",
       gasProxy: "/api/gas",
-      requestTimeoutMs: 90000,
+      requestTimeoutMs: 25000,
       // 本番・スタッフレビューは日付で週を判定（固定したいときだけ 1〜4 を入れる）
       testWeekOverride: null
     };
@@ -1142,7 +1143,33 @@
       });
     }
 
+    let loadingWatchdog = null;
+
+    function setBusyLoading(active, titleText) {
+      const overlay = document.getElementById("loadingOverlay");
+      const title = document.getElementById("loadingTitle");
+      if (title) title.textContent = titleText || "読み込み中です";
+      if (loadingWatchdog) {
+        window.clearTimeout(loadingWatchdog);
+        loadingWatchdog = null;
+      }
+      if (active) {
+        overlay.classList.add("show");
+        overlay.setAttribute("aria-hidden", "false");
+        // フリーズ防止：最大25秒で必ず閉じる
+        loadingWatchdog = window.setTimeout(() => {
+          overlay.classList.remove("show");
+          overlay.setAttribute("aria-hidden", "true");
+          loadingWatchdog = null;
+        }, 25000);
+        return;
+      }
+      overlay.classList.remove("show");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+
     function setAuthMode(mode) {
+      setBusyLoading(false);
       state.authMode = mode === "login" ? "login" : "register";
       const gate = document.getElementById("authGate");
       const form = document.getElementById("loginForm");
@@ -1386,13 +1413,13 @@
     async function loadData(options = {}) {
       const silent = Boolean(options.silent);
       try {
-        const data = await api({ action: "list" });
+        const data = await api({ action: "list" }, 0, { preferJsonp: true, timeoutMs: 20000 });
         if (data.ok) {
           state.records = data.records || [];
           state.rankings = data.rankings || {};
         }
       } catch (error) {
-        throw error;
+        if (!silent) throw error;
       } finally {
         render();
       }
@@ -1410,7 +1437,7 @@
         nickname: cleanNickname,
         pin: cleanPin,
         mode: authMode
-      });
+      }, 0, { preferJsonp: true, timeoutMs: 20000 });
       if (!data.ok || !data.session) {
         return {
           ok: false,
@@ -1443,8 +1470,7 @@
         pin: state.session.pin,
         participantId: state.session.participantId || ""
       };
-      // 記録送信は GAS 直通を優先（Vercel関数の時間制限で切れるのを防ぐ）
-      return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 1, { preferJsonp: true });
+      return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 0, { preferJsonp: true, timeoutMs: 45000 });
     }
 
     function apiViaProxy(params, timeoutMs) {
@@ -1514,10 +1540,11 @@
 
     async function apiOnce(params, options = {}) {
       const preferJsonp = Boolean(options.preferJsonp);
+      const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : CONFIG.requestTimeoutMs;
       const errors = [];
 
-      const tryJsonp = async () => apiViaJsonp(params, CONFIG.requestTimeoutMs);
-      const tryProxy = async () => apiViaProxy(params, 8000);
+      const tryJsonp = async () => apiViaJsonp(params, timeoutMs);
+      const tryProxy = async () => apiViaProxy(params, Math.min(8000, timeoutMs));
 
       if (preferJsonp) {
         try {
@@ -1550,14 +1577,14 @@
       throw errors[errors.length - 1] || new Error("request failed");
     }
 
-    async function api(params, retries = 2, options = {}) {
+    async function api(params, retries = 0, options = {}) {
       let lastError;
       for (let i = 0; i <= retries; i += 1) {
         try {
           return await apiOnce(params, options);
         } catch (error) {
           lastError = error;
-          if (i < retries) await new Promise(r => window.setTimeout(r, 900));
+          if (i < retries) await new Promise(r => window.setTimeout(r, 600));
         }
       }
       throw lastError;
@@ -1737,9 +1764,14 @@
     document.getElementById("logoutButton").addEventListener("click", () => {
       localStorage.removeItem("joyfitSession");
       state.session = null;
+      setBusyLoading(false);
       showDoneOverlay(false);
       showAuthGate();
       render();
+    });
+
+    document.getElementById("loadingCancel").addEventListener("click", () => {
+      setBusyLoading(false);
     });
 
     document.getElementById("goRegister").addEventListener("click", () => setAuthMode("register"));

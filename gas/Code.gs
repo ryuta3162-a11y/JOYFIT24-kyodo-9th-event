@@ -80,7 +80,6 @@ function setupSheets() {
 }
 
 function login(nickname, pin, mode) {
-  setupSheets();
   const cleanNickname = normalizeNickname(nickname);
   const cleanPin = normalizePin(pin);
   const modeName = String(mode || '').trim().toLowerCase();
