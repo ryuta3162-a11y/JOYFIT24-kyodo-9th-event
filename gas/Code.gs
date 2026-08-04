@@ -134,6 +134,8 @@ function login(nickname, pin, mode) {
   const now = new Date();
   const expires = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
   getSheet(SESSIONS_SHEET).appendRow([token, participant.participantId, now.toISOString(), expires.toISOString()]);
+  // 直後の記録送信で「まだ見えない」状態を防ぐ
+  SpreadsheetApp.flush();
 
   return {
     ok: true,
@@ -247,6 +249,8 @@ function upsertRecord(token, body, eventObject) {
       ]]);
     }
 
+    SpreadsheetApp.flush();
+
     return {
       ok: true,
       message: '登録しました。',
@@ -269,35 +273,31 @@ function upsertRecord(token, body, eventObject) {
 }
 
 function resolveParticipantForRecord(token, body) {
-  // 1) セッショントークンで特定
+  // 1) ニックネーム＋PINを最優先（新規登録直後でも確実）
+  const cleanNickname = normalizeNickname(body && body.nickname);
+  const cleanPin = normalizePin(body && body.pin);
+  if (cleanNickname && /^[0-9]{4}$/.test(cleanPin)) {
+    const byName = findParticipantByNickname(cleanNickname);
+    if (byName && byName.active && byName.pin === cleanPin) return byName;
+  }
+
+  // 2) セッショントークン
   const session = findSession(token);
   if (session) {
     const byId = findParticipant(session.participantId);
     if (byId && byId.active) return byId;
   }
 
-  // 2) 端末に残っている participantId でも特定
+  // 3) 端末の participantId ＋ PIN
   const bodyId = String(body && body.participantId || '').trim();
-  if (bodyId) {
+  if (bodyId && cleanNickname && /^[0-9]{4}$/.test(cleanPin)) {
     const byBodyId = findParticipant(bodyId);
-    if (byBodyId && byBodyId.active) {
-      const cleanNickname = normalizeNickname(body && body.nickname);
-      const cleanPin = normalizePin(body && body.pin);
-      if (cleanNickname && /^[0-9]{4}$/.test(cleanPin) && byBodyId.nicknameKey === nicknameKey(cleanNickname) && byBodyId.pin === cleanPin) {
-        return byBodyId;
-      }
+    if (byBodyId && byBodyId.active && byBodyId.nicknameKey === nicknameKey(cleanNickname) && byBodyId.pin === cleanPin) {
+      return byBodyId;
     }
   }
 
-  // 3) トークンが切れていても、ニックネーム＋PINで救済（2日目の失敗対策）
-  const cleanNickname = normalizeNickname(body && body.nickname);
-  const cleanPin = normalizePin(body && body.pin);
-  if (!cleanNickname || !/^[0-9]{4}$/.test(cleanPin)) return null;
-
-  const participant = findParticipantByNickname(cleanNickname);
-  if (!participant || !participant.active) return null;
-  if (participant.pin !== cleanPin) return null;
-  return participant;
+  return null;
 }
 
 function readPublicState() {
@@ -394,6 +394,7 @@ function createParticipant(nickname, pin) {
   // PINが数値化されて先頭0落ちしないようテキスト書式で固定
   const row = sheet.getLastRow();
   sheet.getRange(row, 3).setNumberFormat('@').setValue(cleanPin);
+  SpreadsheetApp.flush();
   return participant;
 }
 

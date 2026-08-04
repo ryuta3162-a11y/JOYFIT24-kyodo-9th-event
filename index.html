@@ -1610,12 +1610,9 @@
         applyScoreInputRules();
         event.currentTarget.reset();
         showAuthGate();
-        try {
-          await loadData({ silent: true });
-        } catch (_) {
-          render();
-        }
+        // ランキング取得を待たずに操作可能にする（直後の記録送信を通しやすくする）
         setBusyLoading(false);
+        loadData({ silent: true }).catch(() => { render(); });
         if (hasMeasuredToday()) {
           updateEntryAvailability();
           openRankingTab();
