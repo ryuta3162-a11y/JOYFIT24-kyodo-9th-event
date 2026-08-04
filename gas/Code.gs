@@ -276,7 +276,20 @@ function resolveParticipantForRecord(token, body) {
     if (byId && byId.active) return byId;
   }
 
-  // 2) トークンが切れていても、ニックネーム＋PINで救済（2日目の失敗対策）
+  // 2) 端末に残っている participantId でも特定
+  const bodyId = String(body && body.participantId || '').trim();
+  if (bodyId) {
+    const byBodyId = findParticipant(bodyId);
+    if (byBodyId && byBodyId.active) {
+      const cleanNickname = normalizeNickname(body && body.nickname);
+      const cleanPin = normalizePin(body && body.pin);
+      if (cleanNickname && /^[0-9]{4}$/.test(cleanPin) && byBodyId.nicknameKey === nicknameKey(cleanNickname) && byBodyId.pin === cleanPin) {
+        return byBodyId;
+      }
+    }
+  }
+
+  // 3) トークンが切れていても、ニックネーム＋PINで救済（2日目の失敗対策）
   const cleanNickname = normalizeNickname(body && body.nickname);
   const cleanPin = normalizePin(body && body.pin);
   if (!cleanNickname || !/^[0-9]{4}$/.test(cleanPin)) return null;

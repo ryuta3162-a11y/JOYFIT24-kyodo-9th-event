@@ -1431,21 +1431,30 @@
     }
 
     async function submitRecord(payload) {
+      if (!state.session || !state.session.token) {
+        return { ok: false, message: "ログイン情報が切れました。\n一度ログアウトして、再度ログインしてください。" };
+      }
+      if (!state.session.pin) {
+        return { ok: false, message: "ログイン情報が古いです。\n一度ログアウトして、再度ログインしてください。" };
+      }
       const body = {
         ...payload,
         nickname: state.session.nickname,
-        pin: state.session.pin
+        pin: state.session.pin,
+        participantId: state.session.participantId || ""
       };
-      return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) });
+      // 記録送信は GAS 直通を優先（Vercel関数の時間制限で切れるのを防ぐ）
+      return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 1, { preferJsonp: true });
     }
 
-    function apiViaProxy(params) {
+    function apiViaProxy(params, timeoutMs) {
       return new Promise((resolve, reject) => {
         const controller = new AbortController();
+        const wait = Number(timeoutMs) > 0 ? Number(timeoutMs) : 8000;
         const timeoutId = window.setTimeout(() => {
           controller.abort();
           reject(new Error("request timeout"));
-        }, CONFIG.requestTimeoutMs);
+        }, wait);
         const search = new URLSearchParams(params);
         fetch(`${CONFIG.gasProxy}?${search.toString()}`, {
           method: "GET",
@@ -1455,8 +1464,14 @@
         })
           .then(async response => {
             window.clearTimeout(timeoutId);
-            if (!response.ok) throw new Error("proxy failed");
-            const data = await response.json();
+            const text = await response.text();
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (_) {
+              throw new Error("invalid proxy response");
+            }
+            if (!response.ok && !data) throw new Error("proxy failed");
             resolve(data);
           })
           .catch(error => {
@@ -1466,28 +1481,26 @@
       });
     }
 
-    function apiViaJsonp(params) {
+    function apiViaJsonp(params, timeoutMs) {
       return new Promise((resolve, reject) => {
         const callbackName = `joyfitCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const script = document.createElement("script");
         const search = new URLSearchParams({ ...params, callback: callbackName });
+        const wait = Number(timeoutMs) > 0 ? Number(timeoutMs) : CONFIG.requestTimeoutMs;
+        let settled = false;
+        const finish = (fn, value) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          script.remove();
+          delete window[callbackName];
+          fn(value);
+        };
         const timeoutId = window.setTimeout(() => {
-          reject(new Error("request timeout"));
-          script.remove();
-          delete window[callbackName];
-        }, CONFIG.requestTimeoutMs);
-        window[callbackName] = data => {
-          window.clearTimeout(timeoutId);
-          resolve(data);
-          script.remove();
-          delete window[callbackName];
-        };
-        script.onerror = () => {
-          window.clearTimeout(timeoutId);
-          reject(new Error("request failed"));
-          script.remove();
-          delete window[callbackName];
-        };
+          finish(reject, new Error("request timeout"));
+        }, wait);
+        window[callbackName] = data => finish(resolve, data);
+        script.onerror = () => finish(reject, new Error("request failed"));
         script.async = true;
         script.referrerPolicy = "no-referrer";
         script.src = `${CONFIG.gasEndpoint}?${search.toString()}`;
@@ -1499,22 +1512,49 @@
       return Boolean(CONFIG.gasProxy) && /^https?:$/i.test(window.location.protocol);
     }
 
-    async function apiOnce(params) {
-      if (canUseProxy()) {
+    async function apiOnce(params, options = {}) {
+      const preferJsonp = Boolean(options.preferJsonp);
+      const errors = [];
+
+      const tryJsonp = async () => apiViaJsonp(params, CONFIG.requestTimeoutMs);
+      const tryProxy = async () => apiViaProxy(params, 8000);
+
+      if (preferJsonp) {
         try {
-          return await apiViaProxy(params);
-        } catch (_) {
-          // ローカル確認やプロキシ未デプロイ時は JSONP にフォールバック
+          return await tryJsonp();
+        } catch (error) {
+          errors.push(error);
+          if (canUseProxy()) {
+            try {
+              return await tryProxy();
+            } catch (proxyError) {
+              errors.push(proxyError);
+            }
+          }
+        }
+      } else {
+        if (canUseProxy()) {
+          try {
+            return await tryProxy();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        try {
+          return await tryJsonp();
+        } catch (error) {
+          errors.push(error);
         }
       }
-      return apiViaJsonp(params);
+
+      throw errors[errors.length - 1] || new Error("request failed");
     }
 
-    async function api(params, retries = 2) {
+    async function api(params, retries = 2, options = {}) {
       let lastError;
       for (let i = 0; i <= retries; i += 1) {
         try {
-          return await apiOnce(params);
+          return await apiOnce(params, options);
         } catch (error) {
           lastError = error;
           if (i < retries) await new Promise(r => window.setTimeout(r, 900));
@@ -1723,7 +1763,7 @@
       if (/参加情報|ログイン情報/.test(raw)) {
         return "ログイン情報が切れました。\n一度ログアウトして、再度ログインしてください。";
       }
-      if (/lock|timeout|timed out|proxy failed|request failed|request timeout|Failed to fetch|NetworkError|quota|exceeded/i.test(raw)) {
+      if (/abort|lock|timeout|timed out|proxy failed|request failed|request timeout|Failed to fetch|NetworkError|quota|exceeded|invalid proxy/i.test(raw)) {
         return "混み合っているか、通信に失敗しました。\n少し待ってからもう一度送信してください。";
       }
       if (!raw) return "送信できませんでした。\nもう一度お試しください。";
