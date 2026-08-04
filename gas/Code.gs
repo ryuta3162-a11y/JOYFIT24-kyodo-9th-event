@@ -152,8 +152,7 @@ function login(nickname, pin, mode) {
 function upsertRecord(token, body, eventObject) {
   const lock = LockService.getScriptLock();
   try {
-    // 混雑時も10秒待ち続けず、早めに日本語で案内する
-    if (!lock.tryLock(5000)) {
+    if (!lock.tryLock(8000)) {
       return {
         ok: false,
         message: '混み合っています。\n少し待ってからもう一度「記録を送信する」を押してください。',
@@ -195,9 +194,8 @@ function upsertRecord(token, body, eventObject) {
 
     const now = new Date();
     const dateKey = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd');
-    const sheet = getSheet(week.sheet);
-    const rows = readEventRows(week);
-    const existing = rows.find(r => r.participantId === participant.participantId);
+    const sheet = getSheetByNameFast(week.sheet);
+    const existing = findParticipantEventRow(sheet, participant.participantId);
     const dates = existing ? [existing.date1, existing.date2, existing.date3] : [];
     const scores = existing ? [existing.score1, existing.score2, existing.score3] : [];
     const filled = scores.filter(value => Number.isFinite(value)).length;
@@ -210,7 +208,7 @@ function upsertRecord(token, body, eventObject) {
     const isoNow = now.toISOString();
 
     if (!existing) {
-      const row = [
+      sheet.appendRow([
         participant.participantId,
         isoNow,
         isoNow,
@@ -222,34 +220,16 @@ function upsertRecord(token, body, eventObject) {
         dateKey, '', '',
         inputBy,
         userAgent,
-      ];
-      sheet.appendRow(row);
+      ]);
     } else {
-      const nextScores = [existing.score1, existing.score2, existing.score3];
-      const nextDates = [existing.date1, existing.date2, existing.date3];
-      nextScores[slot] = score;
-      nextDates[slot] = dateKey;
-      const attempts = nextScores.filter(value => Number.isFinite(value)).length;
-      sheet.getRange(existing.rowNumber, 1, existing.rowNumber, EVENT_HEADERS.length).setValues([[
-        existing.participantId,
-        existing.createdAt || isoNow,
-        isoNow,
-        participant.division,
-        participant.nickname,
-        week.unit,
-        attempts,
-        nextScores[0] == null ? '' : nextScores[0],
-        nextScores[1] == null ? '' : nextScores[1],
-        nextScores[2] == null ? '' : nextScores[2],
-        nextDates[0] || '',
-        nextDates[1] || '',
-        nextDates[2] || '',
-        inputBy,
-        userAgent || existing.userAgent || '',
-      ]]);
+      // 2回目以降は必要セルだけ更新（行まるごと書き換えで落ちる対策）
+      const attempts = filled + 1;
+      sheet.getRange(existing.rowNumber, 3).setValue(isoNow); // updatedAt
+      sheet.getRange(existing.rowNumber, 7).setValue(attempts); // attempts
+      sheet.getRange(existing.rowNumber, 8 + slot).setValue(score); // score1/2/3
+      sheet.getRange(existing.rowNumber, 11 + slot).setValue(dateKey); // date1/2/3
+      if (userAgent) sheet.getRange(existing.rowNumber, 15).setValue(userAgent);
     }
-
-    SpreadsheetApp.flush();
 
     return {
       ok: true,
@@ -267,9 +247,43 @@ function upsertRecord(token, body, eventObject) {
         attempt: slot + 1,
       },
     };
+  } catch (error) {
+    return {
+      ok: false,
+      message: humanizeServerError(error && error.message),
+    };
   } finally {
     try { lock.releaseLock(); } catch (error) {}
   }
+}
+
+function getSheetByNameFast(name) {
+  const sheet = getSpreadsheet().getSheetByName(name);
+  if (!sheet) return getSheet(name);
+  return sheet;
+}
+
+function findParticipantEventRow(sheet, participantId) {
+  const id = String(participantId || '').trim();
+  if (!id) return null;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const values = sheet.getRange(2, 1, lastRow, EVENT_HEADERS.length).getValues();
+  for (let i = 0; i < values.length; i += 1) {
+    if (String(values[i][0] || '').trim() !== id) continue;
+    return {
+      rowNumber: i + 2,
+      score1: toOptionalNumber(values[i][7]),
+      score2: toOptionalNumber(values[i][8]),
+      score3: toOptionalNumber(values[i][9]),
+      date1: normalizeDateKey(values[i][10]),
+      date2: normalizeDateKey(values[i][11]),
+      date3: normalizeDateKey(values[i][12]),
+      userAgent: values[i][14],
+    };
+  }
+  return null;
 }
 
 function resolveParticipantForRecord(token, body) {
@@ -346,7 +360,10 @@ function ensureSheet(name, headers) {
 }
 
 function getParticipants() {
-  return readRows(getSheet(PARTICIPANTS_SHEET), PARTICIPANT_HEADERS)
+  if (typeof getParticipants._cache !== 'undefined' && getParticipants._cache) {
+    return getParticipants._cache;
+  }
+  const rows = readRows(getSheet(PARTICIPANTS_SHEET), PARTICIPANT_HEADERS)
     .map(r => ({
       participantId: String(r.participantId || '').trim(),
       nickname: normalizeNickname(r.nickname),
@@ -356,6 +373,8 @@ function getParticipants() {
       active: isParticipantActive(r.active),
     }))
     .filter(r => r.participantId && r.nickname);
+  getParticipants._cache = rows;
+  return rows;
 }
 
 function findParticipant(participantId) {
