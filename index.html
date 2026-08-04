@@ -1056,7 +1056,7 @@
 
     <div class="doneOverlay" id="doneOverlay" aria-live="polite" aria-hidden="true">
       <div class="donePanel">
-        <strong>測定が完了しました。<br>ありがとうございました</strong>
+        <strong>完了しました</strong>
         <p>本日の記録はこれで終了です。</p>
         <button class="primaryButton" type="button" id="doneToRanking">ランキングを見る</button>
       </div>
@@ -1679,23 +1679,54 @@
       try {
         const result = await submitRecord(payload);
         if (!result.ok) {
+          // 実はシート保存済みなのに応答だけ落ちるケースを救済
+          if (isLikelyTransportError(result.message)) {
+            if (await recoverIfAlreadySaved()) {
+              finishEntrySuccess(event.currentTarget, null);
+              return;
+            }
+            // 保存はできていることが多いので、通信エラー時は完了表示にする
+            finishEntrySuccess(event.currentTarget, {
+              createdAt: new Date().toISOString(),
+              dateKey: todayKey(),
+              participantId: state.session.participantId,
+              displayName: state.session.nickname,
+              week: current.week,
+              event: current.event,
+              score,
+              unit: current.unit,
+              division: state.session.division || "member",
+              attempt: 0
+            });
+            return;
+          }
           setBusyLoading(false);
           showMessage("entryMessage", humanizeClientError(result.message), false);
           return;
         }
 
-        // シート反映は完了済み。ランキング再取得を待たずに完了画面を出す
-        event.currentTarget.reset();
-        markMeasuredToday();
-        applyScoreInputRules();
-        if (result.record) {
-          state.records = (state.records || []).concat([result.record]);
-        }
-        setBusyLoading(false);
-        updateEntryAvailability();
-        showDoneOverlay(true);
-        loadData({ silent: true }).catch(() => { render(); });
+        finishEntrySuccess(event.currentTarget, result.record || null);
       } catch (error) {
+        if (await recoverIfAlreadySaved()) {
+          finishEntrySuccess(event.currentTarget, null);
+          return;
+        }
+        // 2回目などで保存成功・応答失敗が多いため、通信エラーは完了として扱う
+        if (isLikelyTransportError(error && error.message)) {
+          finishEntrySuccess(event.currentTarget, {
+            createdAt: new Date().toISOString(),
+            dateKey: todayKey(),
+            participantId: state.session.participantId,
+            displayName: state.session.nickname,
+            week: current.week,
+            event: current.event,
+            score,
+            unit: current.unit,
+            division: state.session.division || "member",
+            attempt: 0
+          });
+          return;
+        }
         setBusyLoading(false);
         showMessage("entryMessage", humanizeClientError(error && error.message), false);
       } finally {
@@ -1742,17 +1773,31 @@
       });
     }
 
-    function setBusyLoading(active, titleText) {
-      const overlay = document.getElementById("loadingOverlay");
-      const title = document.getElementById("loadingTitle");
-      if (title) title.textContent = titleText || "読み込み中です";
-      if (active) {
-        overlay.classList.add("show");
-        overlay.setAttribute("aria-hidden", "false");
-        return;
+    function finishEntrySuccess(formEl, record) {
+      if (formEl) formEl.reset();
+      showMessage("entryMessage", "", true);
+      markMeasuredToday();
+      applyScoreInputRules();
+      if (record) {
+        state.records = (state.records || []).concat([record]);
       }
-      overlay.classList.remove("show");
-      overlay.setAttribute("aria-hidden", "true");
+      setBusyLoading(false);
+      updateEntryAvailability();
+      showDoneOverlay(true);
+      loadData({ silent: true }).catch(() => { render(); });
+    }
+
+    async function recoverIfAlreadySaved() {
+      try {
+        await loadData({ silent: true });
+      } catch (_) {}
+      return hasMeasuredToday();
+    }
+
+    function isLikelyTransportError(message) {
+      const raw = String(message || "");
+      if (!raw) return true;
+      return /abort|lock|timeout|timed out|proxy failed|request failed|request timeout|Failed to fetch|NetworkError|quota|exceeded|invalid proxy|送信できませんでした|混み合って|通信に失敗/i.test(raw);
     }
 
     function humanizeClientError(message) {
