@@ -1638,24 +1638,29 @@
       };
 
       button.disabled = true;
-      setBusyLoading(true);
+      setBusyLoading(true, "記録しています");
       try {
         const result = await submitRecord(payload);
         if (!result.ok) {
           setBusyLoading(false);
-          showMessage("entryMessage", result.message || "送信できませんでした。", false);
+          showMessage("entryMessage", humanizeClientError(result.message), false);
           return;
         }
+
+        // シート反映は完了済み。ランキング再取得を待たずに完了画面を出す
         event.currentTarget.reset();
         markMeasuredToday();
         applyScoreInputRules();
-        try { await loadData({ silent: true }); } catch (_) { render(); }
+        if (result.record) {
+          state.records = (state.records || []).concat([result.record]);
+        }
         setBusyLoading(false);
         updateEntryAvailability();
         showDoneOverlay(true);
+        loadData({ silent: true }).catch(() => { render(); });
       } catch (error) {
-        try { await loadData({ silent: true }); } catch (_) {}
         setBusyLoading(false);
+        showMessage("entryMessage", humanizeClientError(error && error.message), false);
       } finally {
         button.disabled = false;
       }
@@ -1700,10 +1705,10 @@
       });
     }
 
-    function setBusyLoading(active) {
+    function setBusyLoading(active, titleText) {
       const overlay = document.getElementById("loadingOverlay");
       const title = document.getElementById("loadingTitle");
-      if (title) title.textContent = "読み込み中です";
+      if (title) title.textContent = titleText || "読み込み中です";
       if (active) {
         overlay.classList.add("show");
         overlay.setAttribute("aria-hidden", "false");
@@ -1711,6 +1716,19 @@
       }
       overlay.classList.remove("show");
       overlay.setAttribute("aria-hidden", "true");
+    }
+
+    function humanizeClientError(message) {
+      const raw = String(message || "");
+      if (/参加情報|ログイン情報/.test(raw)) {
+        return "ログイン情報が切れました。\n一度ログアウトして、再度ログインしてください。";
+      }
+      if (/lock|timeout|timed out|proxy failed|request failed|request timeout|Failed to fetch|NetworkError|quota|exceeded/i.test(raw)) {
+        return "混み合っているか、通信に失敗しました。\n少し待ってからもう一度送信してください。";
+      }
+      if (!raw) return "送信できませんでした。\nもう一度お試しください。";
+      if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(raw)) return raw;
+      return "送信できませんでした。\nもう一度お試しください。";
     }
 
     function applyScoreInputRules() {

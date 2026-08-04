@@ -47,7 +47,10 @@ function doGet(e) {
     }
     return jsonResponse(readPublicState(), e);
   } catch (error) {
-    return jsonResponse({ ok: false, message: error.message || '処理に失敗しました。' }, e);
+    return jsonResponse({
+      ok: false,
+      message: humanizeServerError(error && error.message),
+    }, e);
   }
 }
 
@@ -146,11 +149,35 @@ function login(nickname, pin, mode) {
 
 function upsertRecord(token, body, eventObject) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
   try {
-    setupSheets();
+    // 混雑時も10秒待ち続けず、早めに日本語で案内する
+    if (!lock.tryLock(5000)) {
+      return {
+        ok: false,
+        message: '混み合っています。\n少し待ってからもう一度「記録を送信する」を押してください。',
+      };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: '混み合っています。\n少し待ってからもう一度「記録を送信する」を押してください。',
+    };
+  }
+
+  try {
     const participant = resolveParticipantForRecord(token, body);
-    if (!participant || !participant.active) return { ok: false, message: '参加情報を確認してください。' };
+    if (!participant) {
+      return {
+        ok: false,
+        message: 'ログイン情報が切れました。\n一度ログアウトして、再度ログインしてください。',
+      };
+    }
+    if (!participant.active) {
+      return {
+        ok: false,
+        message: 'このニックネームは停止されています。\nスタッフにお声がけください。',
+      };
+    }
 
     const week = getCurrentWeek();
     const score = Number(body.score);
@@ -237,25 +264,26 @@ function upsertRecord(token, body, eventObject) {
       },
     };
   } finally {
-    lock.releaseLock();
+    try { lock.releaseLock(); } catch (error) {}
   }
 }
 
 function resolveParticipantForRecord(token, body) {
+  // 1) セッショントークンで特定
   const session = findSession(token);
-  if (session) return findParticipant(session.participantId);
+  if (session) {
+    const byId = findParticipant(session.participantId);
+    if (byId && byId.active) return byId;
+  }
 
-  // セッショントークンがない場合は既存参加者の照合のみ（自動新規作成しない）
+  // 2) トークンが切れていても、ニックネーム＋PINで救済（2日目の失敗対策）
   const cleanNickname = normalizeNickname(body && body.nickname);
   const cleanPin = normalizePin(body && body.pin);
   if (!cleanNickname || !/^[0-9]{4}$/.test(cleanPin)) return null;
 
   const participant = findParticipantByNickname(cleanNickname);
-  if (!participant) return null;
-  if (!participant.active) return null;
-  if (participant.pin !== cleanPin) {
-    throw new Error('ニックネームもしくはパスワードが違います。\n店舗スタッフまでお声かけください');
-  }
+  if (!participant || !participant.active) return null;
+  if (participant.pin !== cleanPin) return null;
   return participant;
 }
 
@@ -359,12 +387,29 @@ function createParticipant(nickname, pin) {
 function findSession(token) {
   const value = String(token || '').trim();
   if (!value) return null;
-  const rows = readRows(getSheet(SESSIONS_SHEET), SESSION_HEADERS);
+  const sheet = getSheet(SESSIONS_SHEET);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  // 新しいセッションは末尾にあるので、後ろから探す（2日目の遅延・失敗対策）
+  const lookback = Math.min(lastRow - 1, 800);
+  const startRow = lastRow - lookback + 1;
+  const values = sheet.getRange(startRow, 1, lastRow, SESSION_HEADERS.length).getValues();
   const now = new Date();
-  const session = rows.reverse().find(r => String(r.token) === value);
-  if (!session) return null;
-  if (new Date(session.expiresAt) < now) return null;
-  return session;
+
+  for (let i = values.length - 1; i >= 0; i -= 1) {
+    const row = values[i];
+    if (String(row[0] || '').trim() !== value) continue;
+    const expiresAt = row[3];
+    if (expiresAt && new Date(expiresAt) < now) return null;
+    return {
+      token: String(row[0] || '').trim(),
+      participantId: String(row[1] || '').trim(),
+      createdAt: row[2],
+      expiresAt: row[3],
+    };
+  }
+  return null;
 }
 
 function readEventRows(week) {
@@ -610,6 +655,20 @@ function isParticipantActive(value) {
   if (!raw) return true;
   if (raw === 'FALSE' || raw === '0' || raw === 'NG' || raw === 'NO' || raw === '停止') return false;
   return raw === 'TRUE' || raw === '1' || raw === 'YES' || raw === '有効';
+}
+
+function humanizeServerError(message) {
+  const raw = String(message || '');
+  if (/lock|timeout|timed out|exceeded maximum|service invoked too many|quota/i.test(raw)) {
+    return '混み合っています。\n少し待ってからもう一度お試しください。';
+  }
+  if (/Unknown sheet/i.test(raw)) {
+    return 'システム準備中です。\nスタッフにお声がけください。';
+  }
+  if (!raw) return '処理に失敗しました。\nもう一度お試しください。';
+  // すでに日本語の案内はそのまま使う
+  if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(raw)) return raw;
+  return '通信に失敗しました。\nもう一度お試しください。';
 }
 
 function normalizePin(value) {
