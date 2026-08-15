@@ -1,10 +1,11 @@
-const CACHE_NAME = "joyfit24-9th-event-v8";
+const CACHE_NAME = "joyfit24-9th-event-v9";
 const PRECACHE = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-512-maskable.png",
   "./icons/apple-touch-icon.png"
 ];
 
