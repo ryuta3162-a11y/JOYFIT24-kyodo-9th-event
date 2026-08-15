@@ -1,12 +1,12 @@
-const CACHE_NAME = "joyfit24-9th-event-v13";
+const CACHE_NAME = "joyfit24-9th-event-v14";
 const PRECACHE = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/icon-512-maskable.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/mark-192.png",
+  "./icons/mark-512.png",
+  "./icons/mark-512-maskable.png",
+  "./icons/mark-180.png"
 ];
 
 self.addEventListener("install", event => {
