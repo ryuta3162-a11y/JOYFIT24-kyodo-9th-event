@@ -93,39 +93,18 @@
     .brandBlock {
       display: grid;
       justify-items: center;
-      gap: 18px;
+      gap: 16px;
       color: var(--ink);
       padding: 0;
       text-align: center;
     }
 
-    .brandMark {
-      display: grid;
-      justify-items: center;
-      gap: 10px;
-      color: var(--red);
-    }
-
-    .brandMark .jf {
-      margin: 0;
-      font-size: clamp(64px, 18vw, 86px);
-      font-weight: 300;
-      letter-spacing: .18em;
-      line-height: .9;
-    }
-
-    .brandMark .rule {
-      width: 88px;
-      height: 1px;
-      background: var(--red);
-    }
-
-    .brandMark .kyodo {
-      margin: 0;
-      font-size: clamp(18px, 5.2vw, 22px);
-      font-weight: 300;
-      letter-spacing: .28em;
-      line-height: 1;
+    .appLogo {
+      width: 168px;
+      height: 168px;
+      object-fit: cover;
+      border-radius: 36px;
+      background: #000;
     }
 
     .brandBlock .eventTitle {
@@ -135,7 +114,6 @@
       font-weight: 700;
       letter-spacing: .28em;
       color: var(--mute);
-      text-transform: none;
     }
 
     @keyframes softFade {
@@ -337,30 +315,15 @@
       min-width: 0;
     }
 
-    .headerBrand .brandMark {
-      justify-items: start;
-      gap: 4px;
-      color: var(--ink);
-    }
-
-    .headerBrand .brandMark .jf {
-      font-size: 28px;
-      letter-spacing: .16em;
-    }
-
-    .headerBrand .brandMark .rule {
-      width: 42px;
-      background: var(--ink);
-    }
-
-    .headerBrand .brandMark .kyodo {
-      font-size: 11px;
-      letter-spacing: .22em;
+    .headerBrand .appLogo {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
     }
 
     .headerBrand .eventTitle {
       display: block;
-      margin-top: 8px;
+      margin-top: 6px;
       font-size: 12px;
       font-weight: 700;
       letter-spacing: .18em;
@@ -1020,7 +983,7 @@
         gap: 18px;
         padding: calc(64px + env(safe-area-inset-top, 0px)) 16px calc(48px + env(safe-area-inset-bottom, 0px));
       }
-      .brandMark .jf { font-size: 64px; }
+      .appLogo { width: 148px; height: 148px; }
       .promoBoard p { font-size: 13px; line-height: 1.5; }
       .loginBoard { gap: 10px; }
       .eventBoard strong { font-size: 40px; }
@@ -1044,11 +1007,7 @@
       <div class="authHero">
         <div class="authInner" id="authInner">
           <div class="brandBlock">
-            <div class="brandMark">
-              <div class="jf">JF</div>
-              <div class="rule"></div>
-              <div class="kyodo">経堂</div>
-            </div>
+            <img class="appLogo" src="icons/icon-512.png" alt="JOYFIT24 経堂">
             <p class="eventTitle">9th-event</p>
           </div>
 
@@ -1086,11 +1045,7 @@
       <header class="shellHeader">
         <div class="headerTop">
           <div class="headerBrand">
-            <div class="brandMark">
-              <div class="jf">JF</div>
-              <div class="rule"></div>
-              <div class="kyodo">経堂</div>
-            </div>
+            <img class="appLogo" src="icons/icon-192.png" alt="JOYFIT24 経堂">
             <b class="eventTitle">9th-event</b>
           </div>
           <button class="logout" type="button" id="logoutButton">ログアウト</button>
