@@ -1,7 +1,7 @@
 {
-  "name": "JOYFIT24経堂 9周年イベント",
-  "short_name": "9TH EVENT",
-  "description": "JOYFIT24経堂 9周年チャレンジ",
+  "name": "9th-event",
+  "short_name": "9th-event",
+  "description": "JOYFIT24経堂 9周年イベント",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
