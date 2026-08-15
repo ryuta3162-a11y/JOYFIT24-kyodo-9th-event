@@ -7,7 +7,9 @@
 - `index.html`: スマホ向けのログイン制投稿フォーム兼ランキングページです。
 - `gas/Code.gs`: Google Apps Scriptに貼り付けるスプレッドシート連携コードです。
 
-公開URL（Vercel）: https://joyfit-9th-event.vercel.app
+公開URL（Vercel）: https://joyfit24-kyodo-9th-event.vercel.app
+
+このページはPWAです。右上の案内からホーム画面に追加できます。記録・ログイン情報は従来どおり端末内に残り、送信先のスプレッドシートも同じです。
 
 ## 運用イメージ
 

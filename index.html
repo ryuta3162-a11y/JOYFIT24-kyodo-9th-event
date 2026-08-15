@@ -2,8 +2,15 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JOYFIT24 9周年チャレンジ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>JOYFIT24経堂 9周年イベント</title>
+  <meta name="theme-color" content="#d0122d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="9TH EVENT">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
@@ -926,6 +933,66 @@
 
     .entryBoard.is-done #entryForm { display: none; }
 
+    .installBanner {
+      position: fixed;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: 12px;
+      z-index: 40;
+      width: min(260px, calc(100vw - 24px));
+      padding: 12px 12px 12px 14px;
+      border-radius: 14px;
+      background: #d0122d;
+      color: #fff;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .28);
+      display: none;
+    }
+
+    .installBanner.show { display: block; }
+
+    @media (display-mode: standalone) {
+      .installBanner { display: none !important; }
+    }
+
+    .installBanner strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .04em;
+    }
+
+    .installBanner p {
+      margin: 6px 0 10px;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 700;
+      opacity: .94;
+    }
+
+    .installBanner .row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .installBanner button {
+      flex: 1;
+      min-height: 36px;
+      border: 0;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .installBanner .installYes {
+      background: #fff;
+      color: #d0122d;
+    }
+
+    .installBanner .installNo {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.45);
+    }
+
     @media (max-width: 380px) {
       .authInner {
         gap: 18px;
@@ -943,6 +1010,14 @@
   </style>
 </head>
 <body>
+  <div class="installBanner" id="installBanner" aria-live="polite">
+    <strong>アプリを追加できます</strong>
+    <p id="installHint">ホーム画面に置くと、次回からすぐ開けます。</p>
+    <div class="row">
+      <button class="installYes" type="button" id="installYes">インストール</button>
+      <button class="installNo" type="button" id="installNo">今はしない</button>
+    </div>
+  </div>
   <main class="app">
     <section class="view active" id="authView">
       <div class="authHero">
@@ -1917,8 +1992,68 @@
     render();
     applyScoreInputRules();
     showBrowserHint();
+    setupAppInstall();
     if (state.session) {
       loadData({ silent: true }).catch(() => {});
+    }
+
+    function isStandaloneApp() {
+      return window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+    }
+
+    function isIos() {
+      return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    function setupAppInstall() {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      }
+      if (isStandaloneApp() || localStorage.getItem("joyfitInstallDismissed") === "1") return;
+
+      const banner = document.getElementById("installBanner");
+      const yes = document.getElementById("installYes");
+      const no = document.getElementById("installNo");
+      const hint = document.getElementById("installHint");
+      if (!banner || !yes || !no) return;
+
+      let deferredPrompt = null;
+      const showBanner = () => banner.classList.add("show");
+
+      if (isIos()) {
+        hint.textContent = "Safariの共有ボタン →「ホーム画面に追加」でインストールできます。";
+        yes.textContent = "手順を見る";
+        showBanner();
+        yes.addEventListener("click", () => {
+          hint.textContent = "画面下（または上）の共有アイコンを押し、「ホーム画面に追加」を選んでください。";
+        });
+      } else {
+        window.addEventListener("beforeinstallprompt", event => {
+          event.preventDefault();
+          deferredPrompt = event;
+          showBanner();
+        });
+        yes.addEventListener("click", async () => {
+          if (!deferredPrompt) {
+            hint.textContent = "ブラウザのメニューから「アプリをインストール」を選んでください。";
+            showBanner();
+            return;
+          }
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          banner.classList.remove("show");
+        });
+        window.setTimeout(() => {
+          if (!deferredPrompt) showBanner();
+        }, 1200);
+      }
+
+      no.addEventListener("click", () => {
+        localStorage.setItem("joyfitInstallDismissed", "1");
+        banner.classList.remove("show");
+      });
     }
   </script>
 </body>
