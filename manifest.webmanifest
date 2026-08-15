@@ -1,15 +1,17 @@
 {
-  "id": "/9th-event-red",
+  "id": "/",
   "name": "9th-event",
   "short_name": "9th-event",
   "description": "JOYFIT24経堂 9周年イベント",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone"],
   "orientation": "portrait",
   "background_color": "#bd0e2b",
   "theme_color": "#bd0e2b",
   "lang": "ja",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icons/mark-192.png",

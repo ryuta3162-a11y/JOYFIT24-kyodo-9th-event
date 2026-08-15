@@ -8,10 +8,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="9th-event">
-  <link rel="manifest" href="manifest.webmanifest?v=14">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/mark-180.png?v=14">
-  <link rel="icon" type="image/png" sizes="512x512" href="icons/mark-512.png?v=14">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/mark-192.png?v=14">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/mark-180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/mark-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/mark-192.png">
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
@@ -996,7 +1001,7 @@
 </head>
 <body>
   <div class="installBanner" id="installBanner" aria-live="polite">
-    <strong>アプリを追加できます</strong>
+    <strong id="installTitle">アプリを追加できます</strong>
     <p id="installHint">ホーム画面に置くと、次回からすぐ開けます。</p>
     <div class="row">
       <button class="installYes" type="button" id="installYes">インストール</button>
@@ -1008,7 +1013,7 @@
       <div class="authHero">
         <div class="authInner" id="authInner">
           <div class="brandBlock">
-            <img class="appLogo" src="icons/mark-512.png?v=14" alt="JOYFIT24 経堂">
+            <img class="appLogo" src="icons/mark-512.png" alt="JOYFIT24 経堂">
             <p class="eventTitle">9th-event</p>
           </div>
 
@@ -1046,7 +1051,7 @@
       <header class="shellHeader">
         <div class="headerTop">
           <div class="headerBrand">
-            <img class="appLogo" src="icons/mark-512.png?v=14" alt="JOYFIT24 経堂">
+            <img class="appLogo" src="icons/mark-512.png" alt="JOYFIT24 経堂">
             <b class="eventTitle">9th-event</b>
           </div>
           <button class="logout" type="button" id="logoutButton">ログアウト</button>
@@ -1991,54 +1996,84 @@
       return /iPhone|iPad|iPod/i.test(navigator.userAgent);
     }
 
+    function isIosSafari() {
+      const ua = navigator.userAgent || "";
+      if (!isIos()) return false;
+      return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|Line\/|FBAN|FBAV|Instagram/i.test(ua);
+    }
+
     function setupAppInstall() {
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw.js").catch(() => {});
-      }
       if (isStandaloneApp() || localStorage.getItem("joyfitInstallDismissed") === "1") return;
 
       const banner = document.getElementById("installBanner");
+      const title = document.getElementById("installTitle");
       const yes = document.getElementById("installYes");
       const no = document.getElementById("installNo");
       const hint = document.getElementById("installHint");
-      if (!banner || !yes || !no) return;
+      if (!banner || !title || !yes || !no || !hint) return;
 
-      let deferredPrompt = null;
       const showBanner = () => banner.classList.add("show");
-
-      if (isIos()) {
-        hint.textContent = "Safariの共有ボタン →「ホーム画面に追加」でインストールできます。";
-        yes.textContent = "手順を見る";
-        showBanner();
-        yes.addEventListener("click", () => {
-          hint.textContent = "画面下（または上）の共有アイコンを押し、「ホーム画面に追加」を選んでください。";
-        });
-      } else {
-        window.addEventListener("beforeinstallprompt", event => {
-          event.preventDefault();
-          deferredPrompt = event;
-          showBanner();
-        });
-        yes.addEventListener("click", async () => {
-          if (!deferredPrompt) {
-            hint.textContent = "ブラウザのメニューから「アプリをインストール」を選んでください。";
-            showBanner();
-            return;
-          }
-          deferredPrompt.prompt();
-          await deferredPrompt.userChoice;
-          deferredPrompt = null;
-          banner.classList.remove("show");
-        });
-        window.setTimeout(() => {
-          if (!deferredPrompt) showBanner();
-        }, 1200);
-      }
+      const hideBanner = () => banner.classList.remove("show");
+      const hideInstallButton = () => { yes.hidden = true; };
 
       no.addEventListener("click", () => {
         localStorage.setItem("joyfitInstallDismissed", "1");
-        banner.classList.remove("show");
+        hideBanner();
       });
+
+      if (isIos()) {
+        hideInstallButton();
+        if (!isIosSafari() || isInAppBrowser()) {
+          title.textContent = "Safariで開いてください";
+          hint.textContent = "iPhoneはSafariだけホーム画面に追加できます。ChromeやLINEの中では追加できません。";
+        } else {
+          title.textContent = "ホーム画面に追加";
+          hint.innerHTML = "① 下（または上）の四角と矢印の共有ボタン<br>② 「ホーム画面に追加」を選ぶ<br>③ 「追加」を押す";
+        }
+        showBanner();
+        return;
+      }
+
+      if (isInAppBrowser()) {
+        title.textContent = "Chromeで開いてください";
+        hint.textContent = "この画面のままではアプリにできません。ブラウザで開いてからインストールしてください。";
+        yes.textContent = "Chromeで開く";
+        yes.addEventListener("click", () => {
+          const target = "https://joyfit24-kyodo-9th-event.vercel.app/";
+          location.href = `intent://${target.replace(/^https:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`;
+        });
+        showBanner();
+        return;
+      }
+
+      let deferredPrompt = null;
+      window.addEventListener("beforeinstallprompt", event => {
+        event.preventDefault();
+        deferredPrompt = event;
+        title.textContent = "アプリを追加できます";
+        hint.textContent = "このボタンを押すと、そのままインストールできます。";
+        yes.hidden = false;
+        yes.textContent = "インストール";
+        showBanner();
+      });
+
+      yes.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if (choice && choice.outcome === "accepted") hideBanner();
+      });
+
+      window.addEventListener("appinstalled", hideBanner);
+
+      window.setTimeout(() => {
+        if (deferredPrompt || isStandaloneApp() || banner.classList.contains("show")) return;
+        hideInstallButton();
+        title.textContent = "アプリにするには";
+        hint.textContent = "Chromeの右上メニューから「アプリをインストール」を選んでください。「ショートカットを追加」だとアプリになりません。";
+        showBanner();
+      }, 4500);
     }
   </script>
 </body>
