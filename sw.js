@@ -1,4 +1,4 @@
-const CACHE_NAME = "joyfit24-9th-event-v3";
+const CACHE_NAME = "joyfit24-9th-event-v4";
 const PRECACHE = [
   "./",
   "./index.html",
