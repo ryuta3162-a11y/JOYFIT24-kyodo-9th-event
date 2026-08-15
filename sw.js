@@ -1,4 +1,4 @@
-const CACHE_NAME = "joyfit24-9th-event-v10";
+const CACHE_NAME = "joyfit24-9th-event-v11";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -10,9 +10,11 @@ const PRECACHE = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(PRECACHE.map(url => cache.add(url).catch(() => undefined)));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", event => {
@@ -26,17 +28,30 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
+
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return;
   if (url.hostname.includes("script.google")) return;
+  if (url.hostname.includes("googleapis") || url.hostname.includes("gstatic")) return;
 
-  event.respondWith(
-    fetch(request).then(response => {
+  const isNavigate = request.mode === "navigate" || request.destination === "document";
+
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(request);
       if (response && response.ok && url.origin === self.location.origin) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(request, response.clone());
       }
       return response;
-    }).catch(() => caches.match(request).then(cached => cached || caches.match("./index.html")))
-  );
+    } catch (_) {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      if (isNavigate) {
+        const page = await caches.match("./index.html") || await caches.match("./");
+        if (page) return page;
+      }
+      return Response.error();
+    }
+  })());
 });
