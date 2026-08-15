@@ -92,33 +92,50 @@
 
     .brandBlock {
       display: grid;
-      gap: 4px;
+      justify-items: center;
+      gap: 18px;
       color: var(--ink);
       padding: 0;
+      text-align: center;
     }
 
-    .brandBlock .store {
+    .brandMark {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      color: var(--red);
+    }
+
+    .brandMark .jf {
       margin: 0;
-      font-size: clamp(30px, 8.5vw, 38px);
-      line-height: 1.15;
-      font-weight: 900;
-      letter-spacing: .04em;
+      font-size: clamp(64px, 18vw, 86px);
+      font-weight: 300;
+      letter-spacing: .18em;
+      line-height: .9;
     }
 
-    .brandBlock .store .glow {
-      display: inline-block;
-      color: var(--ink);
-      animation: softFade 2s ease-in-out infinite alternate;
+    .brandMark .rule {
+      width: 88px;
+      height: 1px;
+      background: var(--red);
+    }
+
+    .brandMark .kyodo {
+      margin: 0;
+      font-size: clamp(18px, 5.2vw, 22px);
+      font-weight: 300;
+      letter-spacing: .28em;
+      line-height: 1;
     }
 
     .brandBlock .eventTitle {
       margin: 0;
-      font-size: clamp(28px, 8vw, 36px);
+      font-size: 13px;
       line-height: 1.2;
-      font-weight: 900;
-      letter-spacing: .06em;
-      color: var(--red);
-      animation: softFade 2s ease-in-out .15s infinite alternate;
+      font-weight: 700;
+      letter-spacing: .28em;
+      color: var(--mute);
+      text-transform: none;
     }
 
     @keyframes softFade {
@@ -320,29 +337,34 @@
       min-width: 0;
     }
 
-    .headerBrand .eyebrow {
-      display: block;
-      font-size: 14px;
-      font-weight: 900;
-      letter-spacing: .06em;
-      line-height: 1.2;
+    .headerBrand .brandMark {
+      justify-items: start;
+      gap: 4px;
       color: var(--ink);
     }
 
-    .headerBrand .eyebrow .glow {
-      display: inline-block;
-      color: var(--ink);
-      animation: softFade 2s ease-in-out infinite alternate;
+    .headerBrand .brandMark .jf {
+      font-size: 28px;
+      letter-spacing: .16em;
+    }
+
+    .headerBrand .brandMark .rule {
+      width: 42px;
+      background: var(--ink);
+    }
+
+    .headerBrand .brandMark .kyodo {
+      font-size: 11px;
+      letter-spacing: .22em;
     }
 
     .headerBrand .eventTitle {
       display: block;
-      margin-top: 2px;
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: .08em;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .18em;
       color: var(--red);
-      animation: softFade 2s ease-in-out .15s infinite alternate;
     }
 
     .headerUser {
@@ -999,7 +1021,8 @@
         padding: calc(64px + env(safe-area-inset-top, 0px)) 16px calc(48px + env(safe-area-inset-bottom, 0px));
       }
       .brandBlock .store { font-size: 28px; }
-      .brandBlock .eventTitle { font-size: 26px; }
+      .brandBlock .eventTitle { font-size: 12px; }
+      .brandMark .jf { font-size: 64px; }
       .promoBoard p { font-size: 13px; line-height: 1.5; }
       .loginBoard { gap: 10px; }
       .eventBoard strong { font-size: 40px; }
@@ -1023,8 +1046,12 @@
       <div class="authHero">
         <div class="authInner" id="authInner">
           <div class="brandBlock">
-            <p class="store"><span class="glow">JOYFIT24 経堂</span></p>
-            <p class="eventTitle">9周年イベント</p>
+            <div class="brandMark">
+              <div class="jf">JF</div>
+              <div class="rule"></div>
+              <div class="kyodo">経堂</div>
+            </div>
+            <p class="eventTitle">9th-event</p>
           </div>
 
           <div class="authStack">
@@ -1061,8 +1088,12 @@
       <header class="shellHeader">
         <div class="headerTop">
           <div class="headerBrand">
-            <span class="eyebrow"><span class="glow">JOYFIT24 経堂</span></span>
-            <b class="eventTitle">9周年イベント</b>
+            <div class="brandMark">
+              <div class="jf">JF</div>
+              <div class="rule"></div>
+              <div class="kyodo">経堂</div>
+            </div>
+            <b class="eventTitle">9th-event</b>
           </div>
           <button class="logout" type="button" id="logoutButton">ログアウト</button>
         </div>
