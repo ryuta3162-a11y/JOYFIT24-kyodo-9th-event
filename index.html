@@ -1003,7 +1003,12 @@
       text-align: center;
     }
 
-    .installStatusPanel .loaderRing { margin-bottom: 18px; }
+    .installStatusPanel .loaderRing {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 20px;
+      border-width: 4px;
+    }
 
     .installStatusPanel strong {
       display: block;
@@ -1020,6 +1025,9 @@
       font-weight: 700;
       line-height: 1.6;
     }
+
+    .installStatusPanel p[hidden],
+    .installStatusPanel .primaryButton[hidden] { display: none; }
 
     .installStatusPanel .primaryButton {
       margin-top: 22px;
@@ -1052,8 +1060,8 @@
   <div class="installStatus" id="installStatus" aria-live="polite" aria-hidden="true">
     <div class="installStatusPanel">
       <div class="loaderRing" id="installStatusSpin" aria-hidden="true"></div>
-      <strong id="installStatusTitle">インストールが完了するまで少々お待ちください</strong>
-      <p id="installStatusText">このままお待ちください。</p>
+      <strong id="installStatusTitle">インストール中</strong>
+      <p id="installStatusText" hidden></p>
       <button class="primaryButton" type="button" id="installStatusClose" hidden>閉じる</button>
     </div>
   </div>
@@ -2096,7 +2104,7 @@
       }
 
       let deferredPrompt = null;
-      let installFinished = false;
+      let installLocked = false;
       const status = document.getElementById("installStatus");
       const statusTitle = document.getElementById("installStatusTitle");
       const statusText = document.getElementById("installStatusText");
@@ -2105,23 +2113,26 @@
 
       const showInstallWaiting = () => {
         hideBanner();
-        if (!status || !statusTitle || !statusText) return;
+        if (!status || !statusTitle) return;
         if (statusSpin) statusSpin.hidden = false;
         if (statusClose) statusClose.hidden = true;
-        statusTitle.textContent = "インストールが完了するまで少々お待ちください";
-        statusText.textContent = "このままお待ちください。";
+        if (statusText) {
+          statusText.hidden = true;
+          statusText.textContent = "";
+        }
+        statusTitle.textContent = "インストール中";
         status.classList.add("show");
         status.setAttribute("aria-hidden", "false");
       };
 
       const showInstallDone = () => {
-        installFinished = true;
         hideBanner();
         if (!status || !statusTitle || !statusText) return;
         if (statusSpin) statusSpin.hidden = true;
         if (statusClose) statusClose.hidden = false;
-        statusTitle.textContent = "インストールが完了しました";
-        statusText.textContent = "ホーム画面のアイコンから開けます。";
+        statusTitle.textContent = "完了しました";
+        statusText.textContent = "アプリから起動してみてください。";
+        statusText.hidden = false;
         status.classList.add("show");
         status.setAttribute("aria-hidden", "false");
       };
@@ -2134,6 +2145,7 @@
       }
 
       const showInstallReady = () => {
+        if (installLocked) return;
         title.textContent = "アプリを追加できます";
         hint.textContent = "このボタンを押すと、そのままインストールできます。";
         yes.hidden = false;
@@ -2144,23 +2156,19 @@
       window.addEventListener("beforeinstallprompt", event => {
         event.preventDefault();
         deferredPrompt = event;
-        if (!installFinished) showInstallReady();
+        showInstallReady();
       });
 
       yes.addEventListener("click", async () => {
-        if (!deferredPrompt) return;
+        if (!deferredPrompt || installLocked) return;
         deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
         deferredPrompt = null;
-        if (choice && choice.outcome === "accepted") {
-          if (!installFinished) showInstallWaiting();
-          window.setTimeout(() => {
-            if (!installFinished) showInstallDone();
-          }, 12000);
-        }
+        if (!(choice && choice.outcome === "accepted")) return;
+        installLocked = true;
+        showInstallWaiting();
+        window.setTimeout(showInstallDone, 10000);
       });
-
-      window.addEventListener("appinstalled", showInstallDone);
 
       hideInstallButton();
       title.textContent = "アプリを準備しています";
