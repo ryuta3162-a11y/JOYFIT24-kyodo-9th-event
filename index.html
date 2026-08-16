@@ -986,6 +986,45 @@
       border: 1px solid rgba(255,255,255,.45);
     }
 
+    .installStatus {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: #fff;
+    }
+
+    .installStatus.show { display: grid; }
+
+    .installStatusPanel {
+      width: min(100%, 320px);
+      text-align: center;
+    }
+
+    .installStatusPanel .loaderRing { margin-bottom: 18px; }
+
+    .installStatusPanel strong {
+      display: block;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.5;
+      letter-spacing: .04em;
+    }
+
+    .installStatusPanel p {
+      margin: 10px 0 0;
+      color: var(--mute);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.6;
+    }
+
+    .installStatusPanel .primaryButton {
+      margin-top: 22px;
+    }
+
     @media (max-width: 380px) {
       .authInner {
         gap: 18px;
@@ -1008,6 +1047,14 @@
     <div class="row">
       <button class="installYes" type="button" id="installYes">インストール</button>
       <button class="installNo" type="button" id="installNo">今はしない</button>
+    </div>
+  </div>
+  <div class="installStatus" id="installStatus" aria-live="polite" aria-hidden="true">
+    <div class="installStatusPanel">
+      <div class="loaderRing" id="installStatusSpin" aria-hidden="true"></div>
+      <strong id="installStatusTitle">インストールが完了するまで少々お待ちください</strong>
+      <p id="installStatusText">このままお待ちください。</p>
+      <button class="primaryButton" type="button" id="installStatusClose" hidden>閉じる</button>
     </div>
   </div>
   <main class="app">
@@ -2049,6 +2096,43 @@
       }
 
       let deferredPrompt = null;
+      let installFinished = false;
+      const status = document.getElementById("installStatus");
+      const statusTitle = document.getElementById("installStatusTitle");
+      const statusText = document.getElementById("installStatusText");
+      const statusSpin = document.getElementById("installStatusSpin");
+      const statusClose = document.getElementById("installStatusClose");
+
+      const showInstallWaiting = () => {
+        hideBanner();
+        if (!status || !statusTitle || !statusText) return;
+        if (statusSpin) statusSpin.hidden = false;
+        if (statusClose) statusClose.hidden = true;
+        statusTitle.textContent = "インストールが完了するまで少々お待ちください";
+        statusText.textContent = "このままお待ちください。";
+        status.classList.add("show");
+        status.setAttribute("aria-hidden", "false");
+      };
+
+      const showInstallDone = () => {
+        installFinished = true;
+        hideBanner();
+        if (!status || !statusTitle || !statusText) return;
+        if (statusSpin) statusSpin.hidden = true;
+        if (statusClose) statusClose.hidden = false;
+        statusTitle.textContent = "インストールが完了しました";
+        statusText.textContent = "ホーム画面のアイコンから開けます。";
+        status.classList.add("show");
+        status.setAttribute("aria-hidden", "false");
+      };
+
+      if (statusClose) {
+        statusClose.addEventListener("click", () => {
+          status.classList.remove("show");
+          status.setAttribute("aria-hidden", "true");
+        });
+      }
+
       const showInstallReady = () => {
         title.textContent = "アプリを追加できます";
         hint.textContent = "このボタンを押すと、そのままインストールできます。";
@@ -2060,7 +2144,7 @@
       window.addEventListener("beforeinstallprompt", event => {
         event.preventDefault();
         deferredPrompt = event;
-        showInstallReady();
+        if (!installFinished) showInstallReady();
       });
 
       yes.addEventListener("click", async () => {
@@ -2068,10 +2152,15 @@
         deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
         deferredPrompt = null;
-        if (choice && choice.outcome === "accepted") hideBanner();
+        if (choice && choice.outcome === "accepted") {
+          if (!installFinished) showInstallWaiting();
+          window.setTimeout(() => {
+            if (!installFinished) showInstallDone();
+          }, 12000);
+        }
       });
 
-      window.addEventListener("appinstalled", hideBanner);
+      window.addEventListener("appinstalled", showInstallDone);
 
       hideInstallButton();
       title.textContent = "アプリを準備しています";
