@@ -978,6 +978,8 @@
       color: #d0122d;
     }
 
+    .installBanner .installYes[hidden] { display: none; }
+
     .installBanner .installNo {
       background: transparent;
       color: #fff;
@@ -2047,14 +2049,18 @@
       }
 
       let deferredPrompt = null;
-      window.addEventListener("beforeinstallprompt", event => {
-        event.preventDefault();
-        deferredPrompt = event;
+      const showInstallReady = () => {
         title.textContent = "アプリを追加できます";
         hint.textContent = "このボタンを押すと、そのままインストールできます。";
         yes.hidden = false;
         yes.textContent = "インストール";
         showBanner();
+      };
+
+      window.addEventListener("beforeinstallprompt", event => {
+        event.preventDefault();
+        deferredPrompt = event;
+        showInstallReady();
       });
 
       yes.addEventListener("click", async () => {
@@ -2067,13 +2073,23 @@
 
       window.addEventListener("appinstalled", hideBanner);
 
-      window.setTimeout(() => {
-        if (deferredPrompt || isStandaloneApp() || banner.classList.contains("show")) return;
-        hideInstallButton();
-        title.textContent = "アプリにするには";
-        hint.textContent = "Chromeの右上メニューから「アプリをインストール」を選んでください。「ショートカットを追加」だとアプリになりません。";
-        showBanner();
-      }, 4500);
+      hideInstallButton();
+      title.textContent = "アプリを準備しています";
+      hint.textContent = "起動が終わるまで数秒待つと、「インストール」に変わります。更新しなくても大丈夫です。";
+      showBanner();
+
+      const afterReady = ("serviceWorker" in navigator)
+        ? navigator.serviceWorker.ready
+        : Promise.resolve();
+      afterReady.then(() => {
+        window.setTimeout(() => {
+          if (deferredPrompt || isStandaloneApp()) return;
+          hideInstallButton();
+          title.textContent = "アプリにするには";
+          hint.textContent = "Chromeの右上メニューから「アプリをインストール」を選んでください。「ショートカットを追加」だとアプリになりません。";
+          showBanner();
+        }, 2500);
+      }).catch(() => {});
     }
   </script>
 </body>
