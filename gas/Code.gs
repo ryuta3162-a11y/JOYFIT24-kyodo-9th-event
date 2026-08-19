@@ -41,6 +41,7 @@ function doGet(e) {
     if (action === 'health') return jsonResponse({ ok: true, message: 'ok' }, e);
     if (action === 'setup') return jsonResponse(setupSheets(), e);
     if (action === 'login') return jsonResponse(login(params.nickname, params.pin, params.mode), e);
+    if (action === 'lookup') return jsonResponse(lookupParticipant(params.nickname, params.pin), e);
     if (action === 'submit') {
       const body = JSON.parse(String(params.payload || '{}'));
       return jsonResponse(upsertRecord(params.token, body, e), e);
@@ -77,6 +78,29 @@ function setupSheets() {
   migrateLegacyRecordsIfNeeded();
   cache.put('sheetsReady', '1', 21600);
   return { ok: true, message: 'シートを準備しました。' };
+}
+
+function lookupParticipant(nickname, pin) {
+  const cleanNickname = normalizeNickname(nickname);
+  const cleanPin = normalizePin(pin);
+  if (!cleanNickname && !cleanPin) {
+    return { ok: false, message: 'ニックネームかパスワードのどちらかを入力してください。' };
+  }
+  const participants = getParticipants().filter(p => p.active);
+  let found = null;
+  if (cleanNickname) {
+    found = participants.find(p => p.nicknameKey === nicknameKey(cleanNickname));
+  } else if (/^[0-9]{4}$/.test(cleanPin)) {
+    const matches = participants.filter(p => p.pin === cleanPin);
+    if (matches.length === 1) found = matches[0];
+    else if (matches.length > 1) return { ok: false, message: '同じパスワードの方が複数います。\nニックネームも入力してください。' };
+  }
+  if (!found) return { ok: false, message: '見つかりませんでした。\n新規登録してください。' };
+  return {
+    ok: true,
+    nickname: found.nickname,
+    pin: found.pin,
+  };
 }
 
 function login(nickname, pin, mode) {

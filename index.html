@@ -1096,6 +1096,7 @@
                 <input name="pin" autocomplete="current-password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="例：1234" required>
               </label>
               <button class="primaryButton" type="submit" id="loginButton">登録してはじめる</button>
+              <button class="authSwitch" type="button" id="lookupButton">パスワードかニックネームが分からない方はこちら</button>
               <button class="authSwitch" type="button" id="authSwitch">再度ログインはこちら</button>
               <div class="message" id="authMessage"></div>
             </form>
@@ -1977,6 +1978,38 @@
     document.getElementById("goRelogin").addEventListener("click", () => setAuthMode("login"));
     document.getElementById("authSwitch").addEventListener("click", () => {
       setAuthMode(state.authMode === "login" ? "register" : "login");
+    });
+
+    document.getElementById("lookupButton").addEventListener("click", async () => {
+      const form = document.getElementById("loginForm");
+      const nicknameInput = form.querySelector('input[name="nickname"]');
+      const pinInput = form.querySelector('input[name="pin"]');
+      const nickname = normalizeClientNickname(nicknameInput.value);
+      const pin = normalizeClientPin(pinInput.value);
+      if (!nickname && !pin) {
+        showMessage("authMessage", "ニックネームかパスワードのどちらかを入力してから押してください。", false);
+        return;
+      }
+      showMessage("authMessage", "", true);
+      setBusyLoading(true, "検索しています");
+      try {
+        const params = { action: "lookup" };
+        if (nickname) params.nickname = nickname;
+        if (pin) params.pin = pin;
+        const result = await api(params, 0, { preferJsonp: true, timeoutMs: 15000 });
+        setBusyLoading(false);
+        if (!result.ok) {
+          showMessage("authMessage", result.message || "見つかりませんでした。", false);
+          return;
+        }
+        nicknameInput.value = result.nickname || nickname;
+        pinInput.value = result.pin || pin;
+        setAuthMode("login");
+        showMessage("authMessage", "情報を自動入力しました。\n「ログイン」を押してください。", true);
+      } catch (error) {
+        setBusyLoading(false);
+        showMessage("authMessage", "通信に失敗しました。\nもう一度お試しください。", false);
+      }
     });
     document.getElementById("doneToRanking").addEventListener("click", () => {
       showDoneOverlay(false);
