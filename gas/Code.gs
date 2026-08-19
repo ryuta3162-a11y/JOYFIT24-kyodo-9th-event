@@ -423,10 +423,8 @@ function findSession(token) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return null;
 
-  // 新しいセッションは末尾にあるので、後ろから探す（2日目の遅延・失敗対策）
-  const lookback = Math.min(lastRow - 1, 800);
-  const startRow = lastRow - lookback + 1;
-  const values = sheet.getRange(startRow, 1, lastRow, SESSION_HEADERS.length).getValues();
+  const rowCount = lastRow - 1;
+  const values = sheet.getRange(2, 1, rowCount, SESSION_HEADERS.length).getValues();
   const now = new Date();
 
   for (let i = values.length - 1; i >= 0; i -= 1) {

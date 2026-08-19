@@ -1635,7 +1635,41 @@
         pin: state.session.pin,
         participantId: state.session.participantId || ""
       };
-      return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 0, { preferJsonp: true, timeoutMs: 45000 });
+      const result = await api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 0, { preferJsonp: true, timeoutMs: 45000 });
+
+      if (!result.ok && /ログイン情報/.test(String(result.message || ""))) {
+        const refreshed = await silentRelogin();
+        if (refreshed) {
+          body.nickname = state.session.nickname;
+          body.pin = state.session.pin;
+          body.participantId = state.session.participantId || "";
+          return api({ action: "submit", token: state.session.token || "", payload: JSON.stringify(body) }, 0, { preferJsonp: true, timeoutMs: 45000 });
+        }
+      }
+      return result;
+    }
+
+    async function silentRelogin() {
+      if (!state.session || !state.session.nickname || !state.session.pin) return false;
+      try {
+        const data = await api({
+          action: "login",
+          nickname: state.session.nickname,
+          pin: state.session.pin,
+          mode: "login"
+        }, 0, { preferJsonp: true, timeoutMs: 15000 });
+        if (!data.ok || !data.session) return false;
+        state.session = {
+          token: data.session.token,
+          participantId: data.session.participantId || "",
+          nickname: data.session.nickname || state.session.nickname,
+          pin: state.session.pin,
+          division: data.session.division || "member",
+          expiresAt: data.session.expiresAt
+        };
+        localStorage.setItem("joyfitSession", JSON.stringify(state.session));
+        return true;
+      } catch { return false; }
     }
 
     function apiViaProxy(params, timeoutMs) {
@@ -1951,8 +1985,15 @@
     });
 
     function readSession() {
-      try { return JSON.parse(localStorage.getItem("joyfitSession") || "null"); }
-      catch { return null; }
+      try {
+        const raw = JSON.parse(localStorage.getItem("joyfitSession") || "null");
+        if (!raw) return null;
+        if (raw.expiresAt && new Date(raw.expiresAt) < new Date()) {
+          localStorage.removeItem("joyfitSession");
+          return null;
+        }
+        return raw;
+      } catch { return null; }
     }
 
     function showMessage(id, text, ok) {
@@ -2000,7 +2041,7 @@
     function humanizeClientError(message) {
       const raw = String(message || "");
       if (/参加情報|ログイン情報/.test(raw)) {
-        return "ログイン情報が切れました。\n一度ログアウトして、再度ログインしてください。";
+        return "ログイン情報が切れました。\nもう一度送信するか、ログアウトして再度ログインしてください。";
       }
       if (/abort|lock|timeout|timed out|proxy failed|request failed|request timeout|Failed to fetch|NetworkError|quota|exceeded|invalid proxy/i.test(raw)) {
         return "混み合っているか、通信に失敗しました。\n少し待ってからもう一度送信してください。";
@@ -2041,7 +2082,13 @@
     showBrowserHint();
     setupAppInstall();
     if (state.session) {
-      loadData({ silent: true }).catch(() => {});
+      loadData({ silent: true }).catch(async () => {
+        if (state.session && state.session.nickname && state.session.pin) {
+          const ok = await silentRelogin();
+          if (ok) loadData({ silent: true }).catch(() => { render(); });
+          else render();
+        }
+      });
     }
 
     function isStandaloneApp() {
@@ -2170,22 +2217,17 @@
         window.setTimeout(showInstallDone, 10000);
       });
 
-      hideInstallButton();
-      title.textContent = "アプリを準備しています";
-      hint.textContent = "起動が終わるまで数秒待つと、「インストール」に変わります。更新しなくても大丈夫です。";
-      showBanner();
-
       const afterReady = ("serviceWorker" in navigator)
         ? navigator.serviceWorker.ready
         : Promise.resolve();
       afterReady.then(() => {
         window.setTimeout(() => {
-          if (deferredPrompt || isStandaloneApp()) return;
+          if (deferredPrompt || installLocked || isStandaloneApp()) return;
           hideInstallButton();
           title.textContent = "アプリにするには";
-          hint.textContent = "Chromeの右上メニューから「アプリをインストール」を選んでください。「ショートカットを追加」だとアプリになりません。";
+          hint.innerHTML = "Chromeの右上メニュー「⋮」から<br>「アプリをインストール」を選んでください。<br><b>「ショートカットを追加」だとアプリになりません。</b>";
           showBanner();
-        }, 2500);
+        }, 8000);
       }).catch(() => {});
     }
   </script>
