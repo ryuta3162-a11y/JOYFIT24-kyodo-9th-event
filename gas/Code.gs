@@ -5,6 +5,8 @@ const LEGACY_PARTICIPANTS_SHEET = 'participants';
 const LEGACY_SESSIONS_SHEET = 'sessions';
 const LEGACY_RECORDS_SHEET = 'records';
 const TEST_WEEK_OVERRIDE = null;
+const EVENT_ENDED = true;
+const FINAL_REPORT_SHEET = '最終結果';
 
 const EVENT_WEEKS = [
   { week: 1, event: '握力測定', sheet: '握力測定', unit: 'kg', start: '2026-08-03', end: '2026-08-08', higherIsBetter: true },
@@ -42,7 +44,9 @@ function doGet(e) {
     if (action === 'setup') return jsonResponse(setupSheets(), e);
     if (action === 'login') return jsonResponse(login(params.nickname, params.pin, params.mode), e);
     if (action === 'lookup') return jsonResponse(lookupParticipant(params.nickname, params.pin), e);
+    if (action === 'report') return jsonResponse(buildFinalReportSheet(), e);
     if (action === 'submit') {
+      if (EVENT_ENDED) return jsonResponse({ ok: false, message: 'イベントは終了しました。' }, e);
       const body = JSON.parse(String(params.payload || '{}'));
       return jsonResponse(upsertRecord(params.token, body, e), e);
     }
@@ -104,6 +108,9 @@ function lookupParticipant(nickname, pin) {
 }
 
 function login(nickname, pin, mode) {
+  if (EVENT_ENDED) {
+    return { ok: false, message: 'イベントは終了しました。\nご参加ありがとうございました。' };
+  }
   const cleanNickname = normalizeNickname(nickname);
   const cleanPin = normalizePin(pin);
   const modeName = String(mode || '').trim().toLowerCase();
@@ -341,6 +348,7 @@ function readPublicState() {
   setupSheets();
   return {
     ok: true,
+    eventEnded: EVENT_ENDED,
     weeks: EVENT_WEEKS,
     currentWeek: getCurrentWeek(),
     records: publicRecords(),
@@ -585,6 +593,31 @@ function buildRanking(rows, week) {
   return ranked.slice(0, 10).map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+function buildFullRanking(rows, week) {
+  const ranked = rows.map(row => {
+    const scores = [row.score1, row.score2, row.score3].filter(value => Number.isFinite(value));
+    const best = scores.length ? Math.max.apply(null, scores) : 0;
+    return {
+      displayName: row.displayName,
+      week: week.week,
+      event: week.event,
+      unit: week.unit,
+      division: row.division,
+      attempts: scores.length,
+      best,
+      score1: row.score1,
+      score2: row.score2,
+      score3: row.score3,
+      date1: row.date1,
+      date2: row.date2,
+      date3: row.date3,
+    };
+  }).filter(row => row.attempts > 0);
+
+  ranked.sort((a, b) => week.higherIsBetter ? b.best - a.best : a.best - b.best);
+  return ranked.map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 function migrateLegacyRecordsIfNeeded() {
   const ss = getSpreadsheet();
   const legacy = ss.getSheetByName(LEGACY_RECORDS_SHEET);
@@ -726,6 +759,161 @@ function humanizeServerError(message) {
   // すでに日本語の案内はそのまま使う
   if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(raw)) return raw;
   return '通信に失敗しました。\nもう一度お試しください。';
+}
+
+function buildFinalReportSheet() {
+  setupSheets();
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(FINAL_REPORT_SHEET);
+  if (sheet) ss.deleteSheet(sheet);
+  sheet = ss.insertSheet(FINAL_REPORT_SHEET, 0);
+
+  const generatedAt = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+  const memberRows = getAllEventRows().filter(row => row.division !== 'staff');
+  const registered = getParticipants().filter(p => p.active && p.division !== 'staff');
+  const participantMap = {};
+
+  registered.forEach(p => {
+    participantMap[p.participantId] = {
+      nickname: p.nickname,
+      division: p.division,
+      weeks: {},
+      totalAttempts: 0,
+    };
+  });
+
+  memberRows.forEach(row => {
+    const scores = [row.score1, row.score2, row.score3].filter(value => Number.isFinite(value));
+    if (!scores.length) return;
+    if (!participantMap[row.participantId]) {
+      participantMap[row.participantId] = {
+        nickname: row.displayName,
+        division: row.division,
+        weeks: {},
+        totalAttempts: 0,
+      };
+    }
+    const item = participantMap[row.participantId];
+    item.weeks[row.week] = {
+      event: row.event,
+      unit: row.unit,
+      best: Math.max.apply(null, scores),
+      attempts: scores.length,
+      score1: row.score1,
+      score2: row.score2,
+      score3: row.score3,
+      date1: row.date1,
+      date2: row.date2,
+      date3: row.date3,
+    };
+    item.totalAttempts += scores.length;
+  });
+
+  const participants = Object.keys(participantMap).map(id => ({ id, ...participantMap[id] }));
+  const recorded = participants.filter(p => p.totalAttempts > 0);
+  const totalAttempts = recorded.reduce((sum, p) => sum + p.totalAttempts, 0);
+  const values = [];
+
+  function pushRow(cells) {
+    values.push(cells);
+  }
+
+  pushRow(['JOYFIT24 経堂 9周年チャレンジ 最終結果']);
+  pushRow(['集計日時', generatedAt]);
+  pushRow(['イベント期間', '2026/08/03 〜 2026/08/30']);
+  pushRow([]);
+  pushRow(['■ サマリー']);
+  pushRow(['登録参加者数', registered.length]);
+  pushRow(['記録のある参加者数', recorded.length]);
+  pushRow(['総チャレンジ回数（くじ口数）', totalAttempts]);
+  EVENT_WEEKS.forEach(week => {
+    const count = memberRows.filter(r => r.week === week.week && [r.score1, r.score2, r.score3].some(Number.isFinite)).length;
+    pushRow([`第${week.week}週 ${week.event} 参加者`, count]);
+  });
+  pushRow([]);
+
+  EVENT_WEEKS.forEach(week => {
+    pushRow([`■ 第${week.week}週 ${week.event}（${week.unit}）ランキング`]);
+    pushRow(['順位', 'ニックネーム', '最高記録', '挑戦回数', '1回目', '2回目', '3回目', '1回目日付', '2回目日付', '3回目日付']);
+    const ranked = buildFullRanking(readEventRows(week).filter(r => r.division !== 'staff'), week);
+    if (!ranked.length) {
+      pushRow(['-', '記録なし', '', '', '', '', '', '', '', '']);
+    } else {
+      ranked.forEach(item => {
+        pushRow([
+          item.rank,
+          item.displayName,
+          item.best,
+          item.attempts,
+          item.score1 === null || item.score1 === '' ? '' : item.score1,
+          item.score2 === null || item.score2 === '' ? '' : item.score2,
+          item.score3 === null || item.score3 === '' ? '' : item.score3,
+          item.date1 || '',
+          item.date2 || '',
+          item.date3 || '',
+        ]);
+      });
+    }
+    pushRow([]);
+  });
+
+  pushRow(['■ 参加者一覧（週別最高記録）']);
+  pushRow(['ニックネーム', '第1週 握力(kg)', '第2週 前屈(cm)', '第3週 プランク(秒)', '第4週 腕立て(回)', '合計挑戦回数', 'くじ口数']);
+  participants
+    .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ja'))
+    .forEach(p => {
+      pushRow([
+        p.nickname,
+        p.weeks[1] ? p.weeks[1].best : '',
+        p.weeks[2] ? p.weeks[2].best : '',
+        p.weeks[3] ? p.weeks[3].best : '',
+        p.weeks[4] ? p.weeks[4].best : '',
+        p.totalAttempts,
+        p.totalAttempts,
+      ]);
+    });
+  pushRow([]);
+
+  pushRow(['■ くじ抽選用（挑戦回数＝口数）']);
+  pushRow(['ニックネーム', '口数']);
+  recorded
+    .sort((a, b) => b.totalAttempts - a.totalAttempts || a.nickname.localeCompare(b.nickname, 'ja'))
+    .forEach(p => pushRow([p.nickname, p.totalAttempts]));
+
+  const width = Math.max.apply(null, values.map(cells => cells.length));
+  const normalized = values.map(cells => {
+    const rowValues = cells.slice();
+    while (rowValues.length < width) rowValues.push('');
+    return rowValues;
+  });
+  sheet.getRange(1, 1, normalized.length, width).setValues(normalized);
+  sheet.setFrozenRows(1);
+  sheet.getRange(1, 1, 1, width).merge().setFontSize(16).setFontWeight('bold').setBackground('#bd0e2b').setFontColor('#ffffff');
+  sheet.getRange(2, 1, 3, 2).setFontWeight('bold');
+
+  normalized.forEach((cells, index) => {
+    const label = String(cells[0] || '');
+    const rowNo = index + 1;
+    if (/^■/.test(label)) sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
+    if (label === '順位' || (label === 'ニックネーム' && cells[1] === '口数')) {
+      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
+    }
+    if (label === 'ニックネーム' && cells[1] === '第1週 握力(kg)') {
+      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
+    }
+  });
+
+  sheet.autoResizeColumns(1, width);
+
+  return {
+    ok: true,
+    message: `「${FINAL_REPORT_SHEET}」シートを作成しました。`,
+    summary: {
+      registered: registered.length,
+      recorded: recorded.length,
+      totalAttempts,
+    },
+  };
 }
 
 function normalizePin(value) {
