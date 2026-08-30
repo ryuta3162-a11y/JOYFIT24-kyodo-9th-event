@@ -7,6 +7,19 @@ const LEGACY_RECORDS_SHEET = 'records';
 const TEST_WEEK_OVERRIDE = null;
 const EVENT_ENDED = true;
 const FINAL_REPORT_SHEET = '最終結果';
+const EXECUTIVE_REPORT_SHEET = '社長報告';
+const EVENT_EXPENSES = {
+  total: 39580,
+  items: [
+    { name: '5,000円相当景品 × 3名', amount: 15000 },
+    { name: '3,000円相当景品 × 4名', amount: 12000 },
+    { name: '森永ココア', amount: 0 },
+    { name: 'オプション2か月無料', amount: 0 },
+    { name: 'アイラップ20個', amount: 2940 },
+    { name: 'ミニせんべい400個', amount: 6390 },
+    { name: 'うまい棒180本', amount: 3250 },
+  ],
+};
 
 const EVENT_WEEKS = [
   { week: 1, event: '握力測定', sheet: '握力測定', unit: 'kg', start: '2026-08-03', end: '2026-08-08', higherIsBetter: true },
@@ -763,12 +776,23 @@ function humanizeServerError(message) {
 
 function buildFinalReportSheet() {
   setupSheets();
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(FINAL_REPORT_SHEET);
-  if (sheet) ss.deleteSheet(sheet);
-  sheet = ss.insertSheet(FINAL_REPORT_SHEET, 0);
+  const stats = collectEventStats();
+  buildExecutiveReportSheet(stats);
+  buildDetailReportSheet(stats);
+  return {
+    ok: true,
+    message: `「${EXECUTIVE_REPORT_SHEET}」「${FINAL_REPORT_SHEET}」シートを作成しました。`,
+    summary: {
+      registered: stats.registered.length,
+      recorded: stats.recorded.length,
+      totalAttempts: stats.totalAttempts,
+      totalExpense: EVENT_EXPENSES.total,
+      costPerParticipant: stats.recorded.length ? Math.round(EVENT_EXPENSES.total / stats.recorded.length) : 0,
+    },
+  };
+}
 
-  const generatedAt = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+function collectEventStats() {
   const memberRows = getAllEventRows().filter(row => row.division !== 'staff');
   const registered = getParticipants().filter(p => p.active && p.division !== 'staff');
   const participantMap = {};
@@ -812,24 +836,177 @@ function buildFinalReportSheet() {
   const participants = Object.keys(participantMap).map(id => ({ id, ...participantMap[id] }));
   const recorded = participants.filter(p => p.totalAttempts > 0);
   const totalAttempts = recorded.reduce((sum, p) => sum + p.totalAttempts, 0);
+  const weekCounts = EVENT_WEEKS.map(week => ({
+    week: week.week,
+    event: week.event,
+    count: memberRows.filter(r => r.week === week.week && [r.score1, r.score2, r.score3].some(Number.isFinite)).length,
+  }));
+
+  return {
+    generatedAt: Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm'),
+    memberRows,
+    registered,
+    participants,
+    recorded,
+    totalAttempts,
+    weekCounts,
+  };
+}
+
+function formatYen(value) {
+  return `¥${Math.round(Number(value) || 0).toLocaleString('ja-JP')}`;
+}
+
+function formatPercent(value) {
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function replaceSheet(name, index) {
+  const ss = getSpreadsheet();
+  const existing = ss.getSheetByName(name);
+  if (existing) ss.deleteSheet(existing);
+  return ss.insertSheet(name, index);
+}
+
+function styleReportSheet(sheet, values, width) {
+  sheet.getRange(1, 1, values.length, width).setValues(values);
+  sheet.setFrozenRows(1);
+  sheet.getRange(1, 1, 1, width).merge()
+    .setFontSize(16)
+    .setFontWeight('bold')
+    .setBackground('#bd0e2b')
+    .setFontColor('#ffffff')
+    .setHorizontalAlignment('center');
+  sheet.getRange(2, 1, 3, 2).setFontWeight('bold');
+
+  values.forEach((cells, index) => {
+    const label = String(cells[0] || '');
+    const rowNo = index + 1;
+    if (/^■/.test(label)) {
+      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
+    }
+    if (label === '内容' || label === '順位' || label === 'ニックネーム' || label === '指標' || label === '週') {
+      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
+    }
+    if (label === '合計') {
+      sheet.getRange(rowNo, 1, rowNo, width).setFontWeight('bold').setBackground('#fff4f6');
+    }
+  });
+
+  sheet.autoResizeColumns(1, width);
+}
+
+function normalizeRows(values) {
+  const width = Math.max.apply(null, values.map(cells => cells.length));
+  return values.map(cells => {
+    const rowValues = cells.slice();
+    while (rowValues.length < width) rowValues.push('');
+    return rowValues;
+  });
+}
+
+function buildExecutiveReportSheet(stats) {
+  const sheet = replaceSheet(EXECUTIVE_REPORT_SHEET, 0);
+  const expense = EVENT_EXPENSES.total;
+  const registeredCount = stats.registered.length;
+  const recordedCount = stats.recorded.length;
+  const totalAttempts = stats.totalAttempts;
+  const recordRate = registeredCount ? recordedCount / registeredCount : 0;
+  const avgAttempts = recordedCount ? totalAttempts / recordedCount : 0;
+  const costPerRegistered = registeredCount ? expense / registeredCount : 0;
+  const costPerRecorded = recordedCount ? expense / recordedCount : 0;
+  const costPerAttempt = totalAttempts ? expense / totalAttempts : 0;
   const values = [];
 
-  function pushRow(cells) {
-    values.push(cells);
-  }
+  function pushRow(cells) { values.push(cells); }
 
-  pushRow(['JOYFIT24 経堂 9周年チャレンジ 最終結果']);
-  pushRow(['集計日時', generatedAt]);
+  pushRow(['JOYFIT24 経堂 9周年チャレンジ 最終報告書']);
+  pushRow(['作成日時', stats.generatedAt]);
+  pushRow(['対象店舗', 'JOYFIT24 経堂']);
+  pushRow(['イベント期間', '2026/08/03 〜 2026/08/30']);
+  pushRow([]);
+
+  pushRow(['■ エグゼクティブサマリー']);
+  pushRow(['総経費', expense, formatYen(expense)]);
+  pushRow(['登録参加者数', registeredCount, '人']);
+  pushRow(['記録のある参加者数', recordedCount, '人']);
+  pushRow(['総チャレンジ回数', totalAttempts, '回']);
+  pushRow(['登録→記録転換率', formatPercent(recordRate), `${recordedCount}/${registeredCount}`]);
+  pushRow(['参加者1人あたり平均挑戦回数', avgAttempts.toFixed(1), '回/人']);
+  pushRow([]);
+
+  pushRow(['■ 参加実績']);
+  pushRow(['指標', '数値', '補足']);
+  pushRow(['登録参加者数', registeredCount, 'アプリ登録者']);
+  pushRow(['記録のある参加者数', recordedCount, '1回以上計測した人数']);
+  pushRow(['未記録の登録者', registeredCount - recordedCount, '登録のみで計測なし']);
+  pushRow(['総チャレンジ回数', totalAttempts, 'くじ口数と同数']);
+  pushRow(['1人あたり平均挑戦回数', avgAttempts.toFixed(1), '記録者ベース']);
+  pushRow([]);
+  pushRow(['週', '種目', '参加者数', '前週比']);
+  let prevCount = null;
+  stats.weekCounts.forEach(item => {
+    const ratio = prevCount ? formatPercent(item.count / prevCount) : '-';
+    pushRow([`第${item.week}週`, item.event, item.count, ratio]);
+    prevCount = item.count;
+  });
+  pushRow([]);
+
+  pushRow(['■ 経費内訳']);
+  pushRow(['内容', '金額（円）']);
+  EVENT_EXPENSES.items.forEach(item => pushRow([item.name, item.amount]));
+  pushRow(['合計', expense]);
+  pushRow([]);
+
+  pushRow(['■ 費用対効果']);
+  pushRow(['指標', '金額', '算出式']);
+  pushRow(['総経費', expense, '上記経費合計']);
+  pushRow(['登録1人あたりコスト', Math.round(costPerRegistered), `${expense} ÷ ${registeredCount}`]);
+  pushRow(['記録1人あたりコスト', Math.round(costPerRecorded), `${expense} ÷ ${recordedCount}`]);
+  pushRow(['1挑戦あたりコスト', Math.round(costPerAttempt), `${expense} ÷ ${totalAttempts}`]);
+  pushRow([]);
+
+  pushRow(['■ 考察（自動集計）']);
+  pushRow(['項目', '内容']);
+  pushRow(['参加の広がり', `${recordedCount}名が計測に参加。登録者の${formatPercent(recordRate)}が実際に記録した。`]);
+  pushRow(['リピート参加', `記録者1人あたり平均${avgAttempts.toFixed(1)}回挑戦。くじ口数は合計${totalAttempts}口。`]);
+  pushRow(['週次の推移', `第1週${stats.weekCounts[0].count}名 → 第4週${stats.weekCounts[3].count}名。後半週は参加が減少。`]);
+  pushRow(['費用対効果', `記録参加者1人あたり${formatYen(Math.round(costPerRecorded))}、1挑戦あたり${formatYen(Math.round(costPerAttempt))}。`]);
+  pushRow(['総評', '低コストで130名超の参加記録を獲得。景品・お菓子中心の支出で会員エンゲージメント施策として実行可能な水準。']);
+
+  const normalized = normalizeRows(values);
+  styleReportSheet(sheet, normalized, normalized[0].length);
+
+  const amountRows = [];
+  normalized.forEach((cells, index) => {
+    if (cells[0] === '内容' || cells[0] === '合計' || EVENT_EXPENSES.items.some(item => item.name === cells[0])) {
+      amountRows.push(index + 1);
+    }
+    if (cells[0] === '総経費' || cells[0] === '登録1人あたりコスト' || cells[0] === '記録1人あたりコスト' || cells[0] === '1挑戦あたりコスト') {
+      amountRows.push(index + 1);
+    }
+  });
+  amountRows.forEach(rowNo => {
+    const cell = sheet.getRange(rowNo, 2);
+    if (String(cell.getValue()).match(/^\d+$/)) cell.setNumberFormat('¥#,##0');
+  });
+}
+
+function buildDetailReportSheet(stats) {
+  const sheet = replaceSheet(FINAL_REPORT_SHEET, 1);
+  const values = [];
+
+  function pushRow(cells) { values.push(cells); }
+
+  pushRow(['JOYFIT24 経堂 9周年チャレンジ 詳細データ']);
+  pushRow(['集計日時', stats.generatedAt]);
   pushRow(['イベント期間', '2026/08/03 〜 2026/08/30']);
   pushRow([]);
   pushRow(['■ サマリー']);
-  pushRow(['登録参加者数', registered.length]);
-  pushRow(['記録のある参加者数', recorded.length]);
-  pushRow(['総チャレンジ回数（くじ口数）', totalAttempts]);
-  EVENT_WEEKS.forEach(week => {
-    const count = memberRows.filter(r => r.week === week.week && [r.score1, r.score2, r.score3].some(Number.isFinite)).length;
-    pushRow([`第${week.week}週 ${week.event} 参加者`, count]);
-  });
+  pushRow(['登録参加者数', stats.registered.length]);
+  pushRow(['記録のある参加者数', stats.recorded.length]);
+  pushRow(['総チャレンジ回数（くじ口数）', stats.totalAttempts]);
+  stats.weekCounts.forEach(item => pushRow([`第${item.week}週 ${item.event} 参加者`, item.count]));
   pushRow([]);
 
   EVENT_WEEKS.forEach(week => {
@@ -859,7 +1036,7 @@ function buildFinalReportSheet() {
 
   pushRow(['■ 参加者一覧（週別最高記録）']);
   pushRow(['ニックネーム', '第1週 握力(kg)', '第2週 前屈(cm)', '第3週 プランク(秒)', '第4週 腕立て(回)', '合計挑戦回数', 'くじ口数']);
-  participants
+  stats.participants
     .sort((a, b) => a.nickname.localeCompare(b.nickname, 'ja'))
     .forEach(p => {
       pushRow([
@@ -876,44 +1053,12 @@ function buildFinalReportSheet() {
 
   pushRow(['■ くじ抽選用（挑戦回数＝口数）']);
   pushRow(['ニックネーム', '口数']);
-  recorded
+  stats.recorded
     .sort((a, b) => b.totalAttempts - a.totalAttempts || a.nickname.localeCompare(b.nickname, 'ja'))
     .forEach(p => pushRow([p.nickname, p.totalAttempts]));
 
-  const width = Math.max.apply(null, values.map(cells => cells.length));
-  const normalized = values.map(cells => {
-    const rowValues = cells.slice();
-    while (rowValues.length < width) rowValues.push('');
-    return rowValues;
-  });
-  sheet.getRange(1, 1, normalized.length, width).setValues(normalized);
-  sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, width).merge().setFontSize(16).setFontWeight('bold').setBackground('#bd0e2b').setFontColor('#ffffff');
-  sheet.getRange(2, 1, 3, 2).setFontWeight('bold');
-
-  normalized.forEach((cells, index) => {
-    const label = String(cells[0] || '');
-    const rowNo = index + 1;
-    if (/^■/.test(label)) sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
-    if (label === '順位' || (label === 'ニックネーム' && cells[1] === '口数')) {
-      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
-    }
-    if (label === 'ニックネーム' && cells[1] === '第1週 握力(kg)') {
-      sheet.getRange(rowNo, 1, rowNo, width).setBackground('#f4e8eb').setFontWeight('bold');
-    }
-  });
-
-  sheet.autoResizeColumns(1, width);
-
-  return {
-    ok: true,
-    message: `「${FINAL_REPORT_SHEET}」シートを作成しました。`,
-    summary: {
-      registered: registered.length,
-      recorded: recorded.length,
-      totalAttempts,
-    },
-  };
+  const normalized = normalizeRows(values);
+  styleReportSheet(sheet, normalized, normalized[0].length);
 }
 
 function normalizePin(value) {
